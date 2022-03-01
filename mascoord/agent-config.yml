@@ -1,0 +1,72 @@
+- agent:
+    id: agent_1
+    constraints:
+      - constraint:
+          for: agent_2
+          coefficient: 2
+          equation: linear
+      - constraint:
+          for: agent_3
+          coefficient: 1
+          equation: quadratic
+      - constraint:
+          for: agent_4
+          coefficient: 3
+          equation: linear
+      - default:
+          coefficient: 2
+          equation: linear
+- agent:
+    id: agent_2
+    constraints:
+      - constraint:
+          for: agent_1
+          coefficient: 2
+          equation: linear
+      - constraint:
+          for: agent_3
+          coefficient: 1
+          equation: quadratic
+      - constraint:
+          for: agent_4
+          coefficient: 3
+          equation: cubic
+      - default:
+          coefficient: 1
+          equation: linear
+- agent:
+    id: agent_3
+    constraints:
+      - constraint:
+          for: agent_1
+          coefficient: 2
+          equation: quadratic
+      - constraint:
+          for: agent_2
+          coefficient: 4
+          equation: quadratic
+      - constraint:
+          for: agent_4
+          coefficient: 3
+          equation: cubic
+      - default:
+          coefficient: 1
+          equation: linear
+- agent:
+    id: agent_4
+    constraints:
+      - constraint:
+          for: agent_1
+          coefficient: 2
+          equation: linear
+      - constraint:
+          for: agent_2
+          coefficient: 3
+          equation: cubic
+      - constraint:
+          for: agent_3
+          coefficient: 1
+          equation: cubic
+      - default:
+          coefficient: 1
+          equation: linear

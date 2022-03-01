@@ -1,0 +1,19 @@
+const {DOMAIN} = require("./config");
+
+const EVT_DASHBOARD_COMMAND = 'dashboard-command';
+const EVT_BROKER_TO_DASHBOARD = 'publish-event';
+
+const COMM_EXCHANGE = `${DOMAIN}.ddcop`;
+const QUEUE_NAME = 'middleware-amqp-queue';
+
+const MONITORING_CHANNEL = `${DOMAIN}.monitoring`;
+const DASHBOARD_COMMAND_CHANNEL = `${DOMAIN}.command.dashboard`;
+
+exports.EVT_DASHBOARD_COMMAND = EVT_DASHBOARD_COMMAND;
+
+exports.COMM_EXCHANGE = COMM_EXCHANGE;
+exports.QUEUE_NAME = QUEUE_NAME;
+
+exports.MONITORING_CHANNEL = MONITORING_CHANNEL;
+exports.DASHBOARD_COMMAND_CHANNEL = DASHBOARD_COMMAND_CHANNEL;
+exports.EVT_BROKER_TO_DASHBOARD = EVT_BROKER_TO_DASHBOARD;
