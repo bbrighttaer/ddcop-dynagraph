@@ -132,9 +132,6 @@ class Agent:
         constraint = equation_class(*coefficients)
         return constraint
 
-    def initialize_dcop(self):
-        self.dcop.initialize()
-
     def execute_dcop(self):
         self.dcop.execute_dcop()
 
