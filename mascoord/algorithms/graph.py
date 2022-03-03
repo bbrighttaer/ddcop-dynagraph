@@ -107,10 +107,10 @@ class DynaGraph:
 
     def reset(self):
         # reset agent on disconnect
-        self.agent.reset()
+        self.agent.initialize_dcop()
 
         # run DCOP algorithm
-        self.agent.initiate_dcop_execution()
+        self.agent.execute_dcop()
 
         if not self.children:
             self.busy = False

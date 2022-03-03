@@ -41,6 +41,10 @@ def send_report_callback(channel, agent_snapshot):
                           body=messaging.create_agent_report(agent_snapshot()))
 
 
+def change_constraint_callback(dyna_graph, coefficients, neighbor_id):
+    dyna_graph.change_constraint(coefficients, neighbor_id)
+
+
 class Agent:
     class State:
         ANNOUNCING = 'announcing'
@@ -54,7 +58,7 @@ class Agent:
             BROADCASTING: [messaging.BROADCAST_MSG]
         }
 
-    def __init__(self, agent_id, *args, **kwargs):
+    def __init__(self, agent_id, dcop_algorithm, *args, **kwargs):
         # agent props
         self.agent_id = agent_id
         self.log = logger.get_logger(agent_id, prefix='Agent')
@@ -91,7 +95,7 @@ class Agent:
 
         # algorithms
         self.graph = graph.DynaGraph(self)
-        self.dcop = dcop.CCoCoA(self)
+        self.dcop = dcop_algorithm(self)
 
     @property
     def cpa(self):
@@ -128,11 +132,11 @@ class Agent:
         constraint = equation_class(*coefficients)
         return constraint
 
-    def reset(self):
-        self.dcop.reset()
+    def initialize_dcop(self):
+        self.dcop.initialize()
 
-    def initiate_dcop_execution(self):
-        self.dcop.initiate_dcop_execution()
+    def execute_dcop(self):
+        self.dcop.execute_dcop()
 
     def increment_messages_count(self):
         self.messages_count += 1
@@ -148,8 +152,8 @@ class Agent:
             self.client.add_callback_threadsafe(functools.partial(
                 send_report_callback,
                 self.channel,
-                self.agent_snapshot)
-            )
+                self.agent_snapshot
+            ))
         except Exception as e:
             self.log.info(f'Agent state report failed, retry: {str(e)}')
 
@@ -185,7 +189,15 @@ class Agent:
         return parent_child_edges
 
     def change_constraint(self, coefficients, neighbor_id):
-        self.graph.change_constraint(coefficients, neighbor_id)
+        try:
+            self.client.add_callback_threadsafe(functools.partial(
+                change_constraint_callback,
+                self.graph,
+                coefficients,
+                neighbor_id
+            ))
+        except Exception as e:
+            self.log.info(f'Agent state report failed, retry: {str(e)}')
 
     def select_random_neighbor(self):
         keys = list(self.active_constraints.keys())
@@ -225,7 +237,7 @@ class Agent:
             self.graph.receive_network_update_completion_message(payload)
             self.increment_messages_count()
 
-        # C-CoCoA (DCOP) message handling
+        # C-CoCoA message handling
         elif message_type == messaging.UPDATE_STATE_MESSAGE:
             self.dcop.receive_update_state_message(payload)
             self.increment_messages_count()
@@ -264,7 +276,7 @@ class Agent:
             # process network events
             self.client.sleep(config.COMM_TIMEOUT)
 
-            self.dcop.run_algorithm()
+            self.dcop.resolve_value()
 
             # check if neighbors should be pinged
             if not last_ping_call_time or datetime.datetime.now() > last_ping_call_time \

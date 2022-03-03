@@ -26,16 +26,30 @@ REMOVE_AGENT = 'remove_agent'
 CHANGE_CONSTRAINT = 'change_constraint'
 last_event = None
 last_event_date_time = None
+dcop_algorithm = None
 
 
 def create_and_start_agent(agent_id):
-    # try:
-    dcop_agent = agent.Agent(agent_id)
-    MetricsTable.update_metrics()
-    agents[agent_id] = dcop_agent
-    dcop_agent()
-    # except ValueError as e:
-    #     log.error(str(e))
+    if dcop_algorithm:
+        # try:
+        dcop_agent = agent.Agent(agent_id, dcop_algorithm)
+        MetricsTable.update_metrics()
+        agents[agent_id] = dcop_agent
+        dcop_agent()
+        # except ValueError as e:
+        #     log.error(str(e))
+    else:
+        log.error('DCOP algorithm must be provided before creating an agent')
+
+
+def set_dcop_algorithm(alg):
+    from mascoord.algorithms.dcop import CCoCoA, SDPOP
+    global dcop_algorithm
+
+    dcop_algorithm = {
+        'c-cocoa': CCoCoA,
+        'sdpop': SDPOP,
+    }.get(alg)
 
 
 def test_msg_handler(msg):

@@ -4,47 +4,32 @@ from mascoord import config
 from mascoord import messaging
 
 
-class CCoCoA:
+class DCOP:
     """
-    Implementation of the C-CoCoA algorithm to work with dynamic interaction graph
+    Parent class for DCOP algorithms
     """
-
-    IDLE = 'IDLE'
-    DONE = 'DONE'
-    ACTIVE = 'ACTIVE'
-    HOLD = 'HOLD'
 
     def __init__(self, agent, num_discrete_points=3, domain_lb=-50, domain_ub=50):
         self.log = agent.log
         self.agent = agent
-
         self.graph = self.agent.graph
-        self.neighbor_states = {}
-
         self.domain = random.sample(range(domain_lb, domain_ub), num_discrete_points)
         self.domain_lb = domain_lb
         self.domain_ub = domain_ub
-        self.state = self.IDLE
+        self.state = None
         self.value = None
-        self.alpha = config.LEARNING_RATE
-        self.max_iter = 100
         self.cpa = {}
-        self.cost_map = {}
         self.cost = 0
 
-    def reset(self, *args, **kwargs):
+    def initialize(self, *args, **kwargs):
         self.log.info('Resetting...')
+        data = self.initialize_dcop()
 
-        self.state = self.IDLE
-        self.value = None
-
-        # inform dashboard
-        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                         routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                         body=messaging.create_agent_reset_message({
-                                             'agent_id': self.agent.agent_id,
-                                             'state': self.state,
-                                         }))
+        if data:
+            # inform dashboard
+            self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                             routing_key=f'{messaging.MONITORING_CHANNEL}',
+                                             body=messaging.create_agent_reset_message(data))
 
         # inform children
         # for child in self.graph.children:
@@ -55,7 +40,104 @@ class CCoCoA:
         #                                      }))
         self.log.info('Reset completed.')
 
+    def calculate_and_report_cost(self, best_params):
+        """
+        compute final cost
+        """
+        self.cost = 0
+        for neighbor in self.graph.neighbors:
+            constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
+            n_value = best_params[neighbor]
+            self.cost += constraint.equation.evaluate({'x': self.value, 'y': n_value})
+        self.log.info(f'Cost is {self.cost}')
+
+        # if this agent is a leaf node then it should report the cpa to dashboard
+        if not self.agent.graph.children:
+            self.send_cpa_to_dashboard()
+            from mascoord.handlers import MetricsTable
+            MetricsTable.update_metrics()
+
     def resolve_agent_value(self):
+        best_neighbor_params = self.calculate_value()
+        self.calculate_and_report_cost(best_neighbor_params)
+
+    def send_cpa_to_dashboard(self):
+        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                         routing_key=f'{messaging.MONITORING_CHANNEL}',
+                                         body=messaging.create_cpa_report_message({
+                                             'agent_id': self.agent.agent_id,
+                                             'cpa': self.cpa
+                                         }))
+
+    def resolve_value(self):
+        """
+        Resolves an agent's value.
+        """
+        if self.can_resolve_agent_value():
+            self.resolve_agent_value()
+
+    # ---------------- Algorithm specific methods ----------------------- #
+
+    def initialize_dcop(self):
+        """
+        Implements the initialization ops specific to the DCOP algorithm in use.
+        This includes things to be performed before executing the DCOP algorithm.
+        It may return data (as a dict) that would be reported to the dashboard.
+        """
+        self.log.info('dcop_reset not implemented')
+
+    def execute_dcop(self):
+        """
+        This is the entry method for executing the DCOP algorithm.
+        Operations that should happen before the agent calls `resolve_value` should be placed here.
+        """
+        self.log.info('execute_dcop not implemented yet')
+
+    def can_resolve_agent_value(self) -> bool:
+        """
+        Checks if the DCOP algorithm is ready to resolve an agent's value.
+        If True, the dcop algorithm will execute the `calculate_value` method.
+        """
+        self.log.info('can_resolve_agent_value not implemented')
+        return False
+
+    def calculate_value(self) -> dict:
+        """
+        Implement this method to determine the agent's value.
+        Must return a dict containing the value for each neighbor
+        format: {neighbor: value}
+        """
+        self.log.info('function calculate_value not implemented')
+        return {}
+
+
+class CCoCoA(DCOP):
+    """
+    Implementation of the C-CoCoA algorithm to work with dynamic interaction graph
+    """
+
+    IDLE = 'IDLE'
+    DONE = 'DONE'
+    ACTIVE = 'ACTIVE'
+    HOLD = 'HOLD'
+
+    def __init__(self, *args, **kwargs):
+        super(CCoCoA, self).__init__(*args, **kwargs)
+        self.state = self.IDLE
+        self.alpha = config.LEARNING_RATE
+        self.max_iter = 100
+        self.neighbor_states = {}
+        self.cost_map = {}
+
+    def initialize_dcop(self):
+        self.state = self.IDLE
+        self.value = None
+        return {
+            'agent_id': self.agent.agent_id,
+            'state': self.state,
+        }
+
+    def calculate_value(self) -> dict:
         """
         when value is set, send an UpdateStateMessage({agent_id, state=DONE, value})
         :return:
@@ -99,14 +181,6 @@ class CCoCoA:
             # clip to be in domain
             self.value = min(max(self.domain_lb, self.value), self.domain_ub)
 
-        # compute final cost
-        self.cost = 0
-        for neighbor in self.graph.neighbors:
-            constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
-            n_value = best_params[neighbor]
-            self.cost += constraint.equation.evaluate({'x': self.value, 'y': n_value})
-        self.log.info(f'Cost is {self.cost}')
-
         # update agent
         self.cpa[f'agent-{self.agent.agent_id}'] = self.value
         self.state = self.DONE
@@ -120,33 +194,14 @@ class CCoCoA:
                 'cpa': self.cpa,
             })
 
-        # if this agent is a leaf node then it should report the cpa to dashboard
-        if not self.agent.graph.children:
-            self.send_cpa_to_dashboard()
-            from mascoord.handlers import MetricsTable
-            MetricsTable.update_metrics()
-
         self.cost_map.clear()
 
-    def run_algorithm(self):
-        if self.state == self.ACTIVE \
-                and self.graph.neighbors \
-                and len(self.cost_map) == len(self.graph.neighbors):
-            self.resolve_agent_value()
+        return best_params
 
-    # def change_constraints(self):
-    #     """simulates constraint change at the agent level"""
-    #     # reset agent on constraint change
-    #     self.reset()
-    #     # self.initiate_dcop_execution()
-
-    def report_state_change_to_dashboard(self):
-        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                         routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                         body=messaging.create_agent_state_changed_message({
-                                             'agent_id': self.agent.agent_id,
-                                             'state': self.state,
-                                         }))
+    def can_resolve_agent_value(self) -> bool:
+        return self.state == self.ACTIVE \
+               and self.graph.neighbors \
+               and len(self.cost_map) == len(self.graph.neighbors)
 
     def send_update_state_message(self, recipient, data):
         self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
@@ -162,6 +217,14 @@ class CCoCoA:
         self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                          routing_key=f'{messaging.AGENTS_CHANNEL}.{recipient}',
                                          body=messaging.create_cost_message(data))
+
+    def report_state_change_to_dashboard(self):
+        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                         routing_key=f'{messaging.MONITORING_CHANNEL}',
+                                         body=messaging.create_agent_state_changed_message({
+                                             'agent_id': self.agent.agent_id,
+                                             'state': self.state,
+                                         }))
 
     def receive_cost_message(self, payload):
         data = payload['payload']
@@ -204,10 +267,10 @@ class CCoCoA:
 
         if data['state'] == self.DONE:
             self.cpa = data['cpa']
-            self.initiate_dcop_execution()
+            self.execute_dcop()
 
-    def initiate_dcop_execution(self):
-        self.log.info('Initiating DCOP')
+    def execute_dcop(self):
+        self.log.info('Initiating C-CoCoA')
 
         self.state = self.ACTIVE
         self.report_state_change_to_dashboard()
@@ -222,14 +285,6 @@ class CCoCoA:
                 'agent_id': self.agent.agent_id,
                 'domain': self.domain,
             })
-
-    def send_cpa_to_dashboard(self):
-        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                         routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                         body=messaging.create_cpa_report_message({
-                                             'agent_id': self.agent.agent_id,
-                                             'cpa': self.cpa
-                                         }))
 
     def request_states_of_neighbors(self):
         for agent in self.graph.neighbors:
@@ -255,3 +310,22 @@ class CCoCoA:
         sender = data['agent_id']
         if sender in self.graph.neighbors:
             self.neighbor_states[sender] = data['state']
+
+
+class SDPOP(DCOP):
+    """
+    Implements the SDPOP algorithm
+    """
+
+    def initialize_dcop(self):
+        super().initialize_dcop()
+
+    def execute_dcop(self):
+        super().execute_dcop()
+
+    def can_resolve_agent_value(self) -> bool:
+        return super().can_resolve_agent_value()
+
+    def calculate_value(self) -> dict:
+        return super().calculate_value()
+
