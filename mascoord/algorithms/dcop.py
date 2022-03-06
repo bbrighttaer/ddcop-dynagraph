@@ -8,6 +8,7 @@ class DCOP:
     """
     Parent class for DCOP algorithms
     """
+    traversing_order = None
 
     def __init__(self, agent, num_discrete_points=3, domain_lb=-50, domain_ub=50):
         self.log = agent.log
@@ -59,6 +60,25 @@ class DCOP:
 
     # ---------------- Algorithm specific methods ----------------------- #
 
+    def connection_extra_args(self) -> dict:
+        """
+        Provides any custom arguments to be sent when the agent connects to another agent
+        """
+        self.log.info('connection_extra_args not implemented')
+        return {}
+
+    def receive_extra_args(self, sender, args):
+        """
+        Callback for handling extra args received from a new connection
+        """
+        pass
+
+    def agent_disconnection_callback(self, disconnected_agent):
+        """
+        Handles agent disconnection side-effects
+        """
+        pass
+
     def execute_dcop(self):
         """
         This is the entry method for executing the DCOP algorithm.
@@ -88,6 +108,7 @@ class CCoCoA(DCOP):
     """
     Implementation of the C-CoCoA algorithm to work with dynamic interaction graph
     """
+    traversing_order = 'top-down'
 
     IDLE = 'IDLE'
     DONE = 'DONE'
@@ -283,6 +304,15 @@ class SDPOP(DCOP):
     """
     Implements the SDPOP algorithm
     """
+    traversing_order = 'bottom-up'
+
+    def connection_extra_args(self) -> dict:
+        return {
+            'domain': self.domain,
+        }
+
+    def receive_extra_args(self, sender, args):
+        self.log.info(f'Extra args: {sender}-{args}')
 
     def execute_dcop(self):
         super().execute_dcop()

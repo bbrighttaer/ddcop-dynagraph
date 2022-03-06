@@ -98,6 +98,10 @@ class Agent:
         self.dcop = dcop_algorithm(self)
 
     @property
+    def graph_traversing_order(self):
+        return self.dcop.traversing_order
+
+    @property
     def cpa(self):
         return self.dcop.cpa
 
@@ -124,6 +128,16 @@ class Agent:
     @property
     def domain(self):
         return self.dcop.domain
+
+    @property
+    def connection_extra_args(self):
+        return self.dcop.connection_extra_args()
+
+    def agent_disconnection_callback(self, agent_id):
+        self.dcop.agent_disconnection_callback(disconnected_agent=agent_id)
+
+    def connection_extra_args_callback(self, sender, args):
+        self.dcop.receive_extra_args(sender, args)
 
     def get_constraint(self, sender_id, coefficients: list = None):
         if not coefficients:
