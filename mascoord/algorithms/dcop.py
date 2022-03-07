@@ -1,5 +1,7 @@
 import random
 
+import numpy as np
+
 from mascoord import config
 from mascoord import messaging
 
@@ -33,15 +35,14 @@ class DCOP:
             self.cost += constraint.equation.evaluate({'x': self.value, 'y': n_value})
         self.log.info(f'Cost is {self.cost}')
 
+        self.collect_metrics()
+
+    def collect_metrics(self):
         # if this agent is a leaf node then it should report the cpa to dashboard
         if not self.agent.graph.children:
             self.send_cpa_to_dashboard()
             from mascoord.handlers import MetricsTable
             MetricsTable.update_metrics()
-
-    def resolve_agent_value(self):
-        best_neighbor_params = self.calculate_value()
-        self.calculate_and_report_cost(best_neighbor_params)
 
     def send_cpa_to_dashboard(self):
         self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
@@ -56,7 +57,7 @@ class DCOP:
         Resolves an agent's value.
         """
         if self.can_resolve_agent_value():
-            self.resolve_agent_value()
+            self.calculate_value()
 
     # ---------------- Algorithm specific methods ----------------------- #
 
@@ -94,14 +95,11 @@ class DCOP:
         self.log.info('can_resolve_agent_value not implemented')
         return False
 
-    def calculate_value(self) -> dict:
+    def calculate_value(self):
         """
         Implement this method to determine the agent's value.
-        Must return a dict containing the value for each neighbor
-        format: {neighbor: value}
         """
-        self.log.info('function calculate_value not implemented')
-        return {}
+        pass
 
 
 class CCoCoA(DCOP):
@@ -142,7 +140,7 @@ class CCoCoA(DCOP):
                 'domain': self.domain,
             })
 
-    def calculate_value(self) -> dict:
+    def calculate_value(self):
         """
         when value is set, send an UpdateStateMessage({agent_id, state=DONE, value})
         :return:
@@ -201,7 +199,7 @@ class CCoCoA(DCOP):
 
         self.cost_map.clear()
 
-        return best_params
+        self.calculate_and_report_cost(best_params)
 
     def can_resolve_agent_value(self) -> bool:
         return self.state == self.ACTIVE \
@@ -306,20 +304,137 @@ class SDPOP(DCOP):
     """
     traversing_order = 'bottom-up'
 
+    def __init__(self, *args, **kwargs):
+        super(SDPOP, self).__init__(*args, **kwargs)
+        self.neighbor_domains = {}
+        self.util_messages = {}
+        self.util_messages_cache = {}
+        self.X_ij = None
+
     def connection_extra_args(self) -> dict:
         return {
             'domain': self.domain,
         }
 
     def receive_extra_args(self, sender, args):
-        self.log.info(f'Extra args: {sender}-{args}')
+        self.neighbor_domains[sender] = args['domain']
+
+    def agent_disconnection_callback(self, agent):
+        if agent in self.neighbor_domains:
+            self.neighbor_domains.pop(agent)
+
+        if agent in self.util_messages:
+            self.util_messages.pop(agent)
+
+        if agent in self.util_messages_cache:
+            self.util_messages_cache.pop(agent)
+
+    def _compute_util_and_value(self):
+        # children
+        c_util_sum = np.array([0] * len(self.domain))
+        for child in self.graph.children:
+            c_util = None
+            if child in self.util_messages:
+                c_util = self.util_messages[child]
+            elif child in self.util_messages_cache:
+                c_util = self.util_messages_cache[child]
+
+            if c_util:
+                c_util_sum += np.array(c_util)
+
+        # parent
+        if self.graph.parent:
+            p_domain = self.neighbor_domains[self.graph.parent]
+
+            x = c_util_sum.reshape(-1, 1)
+            y = np.array(p_domain).reshape(-1, 1)
+            xx, yy = np.meshgrid(x, y, indexing='ij')
+
+            constraint = self.agent.active_constraints[f'{self.agent.agent_id},{self.graph.parent}']
+            self.X_ij = constraint.equation.evaluate({'x': xx, 'y': yy})
+            x_j = self.X_ij.min(axis=0)
+
+            self.send_util_message(self.graph.parent, x_j.tolist())
+        else:
+            utils = c_util_sum.reshape(-1, )
+            self.cost = utils.min()
+            self.value = utils.argmin()
+            self.cpa[f'agent-{self.agent.agent_id}'] = int(self.value)
+
+            self.log.info(f'Cost is {self.cost}')
+
+            # send value msgs to children
+            for child in self.graph.children:
+                self.send_value_message(child, {'cpa': self.cpa})
+
+        self._cache_util_msgs()
 
     def execute_dcop(self):
-        super().execute_dcop()
+        self.log.info('Initiating SDPOP...')
+        self.X_ij = None
+
+        # calculate UTIL messages and send to parent
+        self._compute_util_and_value()
 
     def can_resolve_agent_value(self) -> bool:
-        return super().can_resolve_agent_value()
+        # agent should have received util msgs from all children
+        return self.graph.neighbors \
+               and self.util_messages \
+               and len(self.util_messages) == len(self.graph.children)
 
-    def calculate_value(self) -> dict:
-        return super().calculate_value()
+    def calculate_value(self):
+        # calculate value and send VALUE messages and send to children
+        self._compute_util_and_value()
 
+    def _cache_util_msgs(self):
+        self.util_messages_cache = self.util_messages
+        self.util_messages = {}
+
+    def receive_util_message(self, payload):
+        self.log.info(f'Received util message: {payload}')
+        data = payload['payload']
+        sender = data['agent_id']
+        util = data['util']
+
+        if self.graph.is_child(sender):
+            self.util_messages[sender] = util
+
+    def send_util_message(self, recipient, util):
+        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                         routing_key=f'{messaging.AGENTS_CHANNEL}.{recipient}',
+                                         body=messaging.create_util_message({
+                                             'agent_id': self.agent.agent_id,
+                                             'util': util,
+                                         }))
+
+    def receive_value_message(self, payload):
+        self.log.info(f'Received value message: {payload}')
+        data = payload['payload']
+        sender = data['agent_id']
+        value = data['value']
+
+        # determine own value from parent's value
+        if self.graph.is_parent(sender) and self.X_ij is not None:
+            parent_cpa = value['cpa']
+            parent_value = parent_cpa[f'agent-{sender}']
+            self.cpa = parent_cpa
+            x_i = self.X_ij[:, parent_value].reshape(-1, )
+            self.cost = x_i.min()
+            self.value = x_i.argmin()
+            self.cpa[f'agent-{self.agent.agent_id}'] = int(self.value)
+
+            self.log.info(f'Cost is {self.cost}')
+
+            # send value msgs to children
+            for child in self.graph.children:
+                self.send_value_message(child, {'cpa': self.cpa})
+
+            self.collect_metrics()
+
+    def send_value_message(self, recipient, value):
+        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                         routing_key=f'{messaging.AGENTS_CHANNEL}.{recipient}',
+                                         body=messaging.create_value_message({
+                                             'agent_id': self.agent.agent_id,
+                                             'value': value,
+                                         }))

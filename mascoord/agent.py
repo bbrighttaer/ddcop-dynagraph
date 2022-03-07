@@ -134,7 +134,7 @@ class Agent:
         return self.dcop.connection_extra_args()
 
     def agent_disconnection_callback(self, agent_id):
-        self.dcop.agent_disconnection_callback(disconnected_agent=agent_id)
+        self.dcop.agent_disconnection_callback(agent=agent_id)
 
     def connection_extra_args_callback(self, sender, args):
         self.dcop.receive_extra_args(sender, args)
@@ -169,7 +169,7 @@ class Agent:
             self.log.info(f'Agent state report failed, retry: {str(e)}')
 
     def agent_snapshot(self):
-        return {
+        snapshot = {
             'agent_id': self.agent_id,
             'network': self.graph.network,
             'constraints': {k: str(v) for k, v in self.active_constraints.items()},
@@ -179,10 +179,20 @@ class Agent:
             'pinged_list': self.graph.pinged_list_dict,
             'responses': list(self.graph.responses),
             'value': self.dcop.value,
-            'neighbor_states': self.dcop.neighbor_states,
-            'cost_map': self.dcop.cost_map,
             'busy': self.graph.busy,
         }
+        if isinstance(self.dcop, dcop.CCoCoA):
+            snapshot.update({
+                'neighbor_states': self.dcop.neighbor_states,
+                'cost_map': self.dcop.cost_map,
+            })
+        elif isinstance(self.dcop, dcop.SDPOP):
+            snapshot.update({
+                'neighbor_domains': self.dcop.neighbor_domains,
+                'util_messages': self.dcop.util_messages,
+                'util_messages_cache': self.dcop.util_messages_cache,
+            })
+        return snapshot
 
     def get_child_connections_history(self):
         cons = []
@@ -248,6 +258,10 @@ class Agent:
             self.graph.receive_network_update_completion_message(payload)
             self.increment_messages_count()
 
+        elif message_type == messaging.CONSTRAINT_CHANGED:
+            self.graph.receive_constraint_changed_message(payload)
+            self.increment_messages_count()
+
         # C-CoCoA message handling
         elif message_type == messaging.UPDATE_STATE_MESSAGE:
             self.dcop.receive_update_state_message(payload)
@@ -261,8 +275,12 @@ class Agent:
             self.dcop.receive_cost_message(payload)
             self.increment_messages_count()
 
-        elif message_type == messaging.CONSTRAINT_CHANGED:
-            self.graph.receive_constraint_changed_message(payload)
+        # SDPOP message handling
+        elif message_type == messaging.VALUE_MESSAGE:
+            self.dcop.receive_value_message(payload)
+            self.increment_messages_count()
+        elif message_type == messaging.UTIL_MESSAGE:
+            self.dcop.receive_util_message(payload)
             self.increment_messages_count()
 
         # elif message_type == messaging.AGENT_RESET:

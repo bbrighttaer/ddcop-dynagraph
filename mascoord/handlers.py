@@ -238,6 +238,8 @@ class MetricsTable:
 
         cls.cost[last_event] = total_cost
         cls.message_count[last_event] = messages_count
+        print(cls.cost)
+        print(cls.message_count)
 
     @classmethod
     def to_csv(cls, path):

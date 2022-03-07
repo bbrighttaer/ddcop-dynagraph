@@ -52,6 +52,10 @@ UPDATE_STATE_MESSAGE = 'UpdateStateMsg'
 INQUIRY_MESSAGE = 'InquiryMessage'
 COST_MESSAGE = 'CostMessage'
 
+# SDPOP message types
+VALUE_MESSAGE = 'ValueMessage'
+UTIL_MESSAGE = 'UtilMessage'
+
 
 def _create_msg(msg_type, data):
     return json.dumps({
@@ -159,3 +163,11 @@ def create_saved_simulations_report(data):
 
 def create_constraint_changed_message(data):
     return _create_msg(CONSTRAINT_CHANGED, data)
+
+
+def create_value_message(data):
+    return _create_msg(VALUE_MESSAGE, data)
+
+
+def create_util_message(data):
+    return _create_msg(UTIL_MESSAGE, data)
