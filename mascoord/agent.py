@@ -123,6 +123,9 @@ class Agent:
     def cost(self):
         return self.dcop.cost
 
+    def clear_cost(self):
+        self.dcop.cost = None
+
     @property
     def parent(self):
         return self.graph.parent
@@ -385,6 +388,7 @@ class Agent:
 def create_metrics_on_message(metrics):
     def on_message(ch, method, properties, body):
         body = parse_amqp_body(body)
+        metrics.log.info(body)
         metrics.record_agent_stats(body['payload'])
 
     return on_message
@@ -397,7 +401,6 @@ class MetricsAgent:
         self.agent_id = 'metrics-agent'
         self.terminate = False
 
-        self.event = None
         self.cost_per_agent = {}
         self.num_msgs_per_agent = {}
 
@@ -421,12 +424,11 @@ class MetricsAgent:
         self.cost_per_agent[agent] = payload['cost']
         self.num_msgs_per_agent[agent] = payload['num_messages']
 
-    def set_event(self, evt):
-        if self.cost_per_agent:
-            self.record_metrics(self.event)
-            self.cost_per_agent.clear()
-            self.num_msgs_per_agent.clear()
-        self.event = evt
+    def set_event(self, event):
+        self.log.info(event)
+        self.record_metrics(event)
+        self.cost_per_agent.clear()
+        self.num_msgs_per_agent.clear()
 
     def __call__(self, *args, **kwargs):
         log = MetricsAgent.log
@@ -453,10 +455,6 @@ class MetricsAgent:
         self.num_mgs_per_event[event] = messages_count
 
     def to_csv(self, path):
-        # record metrics for last event
-        self.record_metrics(self.event)
-
-        # save to file
         df = pd.DataFrame({
             'event': list(self.costs_per_event.keys()),
             'type': [evt.split(':')[0] for evt in self.costs_per_event.keys()],

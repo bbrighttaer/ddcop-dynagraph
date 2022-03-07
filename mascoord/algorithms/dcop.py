@@ -23,7 +23,7 @@ class DCOP:
         self.state = None
         self.value = None
         self.cpa = {}
-        self.cost = 0
+        self.cost = None
 
     def calculate_and_report_cost(self, best_params):
         """
@@ -42,7 +42,7 @@ class DCOP:
         # if this agent is a leaf node then it should report the cpa to dashboard
         if not self.agent.graph.children:
             self.send_cpa_to_dashboard()
-        self.agent.report_metrics()
+        # self.agent.report_metrics()
 
     def send_cpa_to_dashboard(self):
         self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,

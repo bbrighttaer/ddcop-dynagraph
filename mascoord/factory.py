@@ -39,7 +39,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     handlers.set_dcop_algorithm(args.alg)
-    handlers.start_metrics_agent()
 
     try:
         connection = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL, port=config.BROKER_PORT))
