@@ -76,6 +76,10 @@ def add_agent_handler(msg):
         nodes = utils.nodes_list
         for _ in range(num_agents):
             if nodes:
+                evt = f'{ADD_AGENT}:{count}'
+                commands.append(evt)
+                on_environment_event(evt)
+
                 _spawn_agent(nodes.pop(0))
     else:
         for _ in range(num_agents):
@@ -141,7 +145,6 @@ def remove_agent_handler(msg):
 
 def change_constraint_handler(msg):
     event_delay()
-    commands.append(CHANGE_CONSTRAINT)
     coefficients = random.sample(range(1, 10), 3)
 
     if agents:

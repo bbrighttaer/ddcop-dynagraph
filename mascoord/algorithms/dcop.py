@@ -13,7 +13,7 @@ class DCOP:
     traversing_order = None
     name = 'dcop-base'
 
-    def __init__(self, agent, num_discrete_points=3, domain_lb=-5, domain_ub=5):
+    def __init__(self, agent, num_discrete_points=3, domain_lb=-50, domain_ub=50):
         self.log = agent.log
         self.agent = agent
         self.graph = self.agent.graph
@@ -348,12 +348,12 @@ class SDPOP(DCOP):
         if self.graph.parent:
             p_domain = self.neighbor_domains[self.graph.parent]
 
-            x = c_util_sum.reshape(-1, 1)
+            x = np.array(self.domain).reshape(-1, 1)
             y = np.array(p_domain).reshape(-1, 1)
             xx, yy = np.meshgrid(x, y, indexing='ij')
 
             constraint = self.agent.active_constraints[f'{self.agent.agent_id},{self.graph.parent}']
-            self.X_ij = constraint.equation.evaluate({'x': xx, 'y': yy})
+            self.X_ij = constraint.equation.evaluate({'x': xx, 'y': yy}) + c_util_sum.reshape(-1, 1)
             x_j = self.X_ij.min(axis=0)
 
             self.send_util_message(self.graph.parent, x_j.tolist())
