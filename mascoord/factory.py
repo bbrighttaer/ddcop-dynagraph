@@ -1,5 +1,6 @@
 import datetime
 import os
+import argparse
 
 import pika
 
@@ -25,6 +26,20 @@ def on_message(ch, method, properties, body):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Dynamic DCOP Algorithms')
+    parser.add_argument(
+        '-a',
+        '--algorithm',
+        dest='alg',
+        type=str,
+        choices=['c-cocoa', 'sdpop'],
+        required=True,
+        help='The DCOP algorithm to be used with the Dynamic Graph algorithm',
+    )
+
+    args = parser.parse_args()
+    handlers.set_dcop_algorithm(args.alg)
+
     try:
         connection = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL, port=config.BROKER_PORT))
         channel = connection.channel()
@@ -55,6 +70,13 @@ if __name__ == '__main__':
                                   body=messaging.create_saved_simulations_report({
                                       'simulations': parsed_sim,
                                   }))
+
+        # report algorithm in use
+        channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                              routing_key=f'{messaging.MONITORING_CHANNEL}',
+                              body=messaging.create_dcop_algorithm_report({
+                                  'dcop': args.alg,
+                              }))
 
         channel.start_consuming()
     except ConnectionError as e:

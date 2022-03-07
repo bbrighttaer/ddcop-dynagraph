@@ -7,7 +7,7 @@ dotenv.load_dotenv()
 DOMAIN = os.environ['DOMAIN']
 BROKER_URL = os.environ['BROKER_URL']
 BROKER_PORT = os.environ['BROKER_PORT']
-USE_PREDEFINED_NETWORK = False
+USE_PREDEFINED_NETWORK = True
 MQTT_USERNAME = os.environ['MQTT_USERNAME']
 MQTT_PASSWORD = os.environ['MQTT_PASSWORD']
 COMM_TIMEOUT = int(os.environ['COMM_TIMEOUT'])

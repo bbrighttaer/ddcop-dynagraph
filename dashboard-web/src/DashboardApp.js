@@ -3,8 +3,6 @@ import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import Modal from "./components/Modal";
 import {useSelector} from "react-redux";
-import {HOME, METRICS} from "./util";
-import Metrics from "./components/Metrics";
 
 function DashboardApp() {
     const showModal = useSelector(state => state.app.showModal);

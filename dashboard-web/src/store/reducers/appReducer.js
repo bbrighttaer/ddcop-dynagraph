@@ -1,7 +1,8 @@
 import {
+    CLEAR_MESSAGES,
     CONNECT,
     DISCONNECT,
-    RECEIVED_MESSAGE, SET_ACTIVE_APP,
+    RECEIVED_MESSAGE, SET_ACTIVE_APP, SET_DCOP_ALGORITHM,
     SET_SAVED_SIMULATIONS,
     SET_SELECTED_MESSAGE_INDEX,
     SET_SHOW_MODAL
@@ -15,9 +16,10 @@ const init_state = {
     receivedMessages: [],
     selectedMessageIndex: null,
     activeApp: HOME,
+    dcop: null,
 };
 
-const appReducer = (state=init_state, action) => {
+const appReducer = (state = init_state, action) => {
     switch (action.type) {
         case CONNECT:
             return {
@@ -53,6 +55,16 @@ const appReducer = (state=init_state, action) => {
             return {
                 ...state,
                 activeApp: action.activeApp,
+            }
+        case SET_DCOP_ALGORITHM:
+            return {
+                ...state,
+                dcop: action.dcop,
+            }
+        case CLEAR_MESSAGES:
+            return {
+                ...state,
+                receivedMessages: [state.receivedMessages?.[0]],
             }
         default:
             return state;

@@ -26,16 +26,30 @@ REMOVE_AGENT = 'remove_agent'
 CHANGE_CONSTRAINT = 'change_constraint'
 last_event = None
 last_event_date_time = None
+dcop_algorithm = None
+metrics_agent = None
+
+costs_per_event = {}
+num_mgs_per_event = {}
 
 
 def create_and_start_agent(agent_id):
-    # try:
-    dcop_agent = agent.Agent(agent_id)
-    MetricsTable.update_metrics()
-    agents[agent_id] = dcop_agent
-    dcop_agent()
-    # except ValueError as e:
-    #     log.error(str(e))
+    if dcop_algorithm:
+        dcop_agent = agent.Agent(agent_id, dcop_algorithm, coefficients_dict=utils.coefficients_dict)
+        agents[agent_id] = dcop_agent
+        dcop_agent()
+    else:
+        log.error('DCOP algorithm must be provided before creating an agent')
+
+
+def set_dcop_algorithm(alg):
+    from mascoord.algorithms.dcop import CCoCoA, SDPOP
+    global dcop_algorithm
+
+    dcop_algorithm = {
+        'c-cocoa': CCoCoA,
+        'sdpop': SDPOP,
+    }.get(alg)
 
 
 def test_msg_handler(msg):
@@ -65,13 +79,29 @@ def add_agent_handler(msg):
         nodes = utils.nodes_list
         for _ in range(num_agents):
             if nodes:
+                evt = f'{ADD_AGENT}:{count}'
+                commands.append(evt)
+
                 _spawn_agent(nodes.pop(0))
+
+                while is_environment_busy():
+                    pass
+
+                on_environment_event(evt)
+
+                count += 1
     else:
         for _ in range(num_agents):
-            _spawn_agent(agent_id=count)
             evt = f'{ADD_AGENT}:{count}'
             commands.append(evt)
+
+            _spawn_agent(agent_id=count)
+
+            while is_environment_busy():
+                pass
+
             on_environment_event(evt)
+
             count += 1
 
     # time.sleep(2)
@@ -84,6 +114,17 @@ def add_agent_handler(msg):
 def _spawn_agent(agent_id):
     t = threading.Thread(target=create_and_start_agent, args=(str(agent_id),))
     agent_id_to_thread[agent_id] = t
+    t.start()
+
+
+def create_and_start_metrics_agent():
+    global metrics_agent
+    metrics_agent = agent.MetricsAgent()
+    metrics_agent()
+
+
+def start_metrics_agent():
+    t = threading.Thread(target=create_and_start_metrics_agent)
     t.start()
 
 
@@ -105,26 +146,38 @@ def remove_agent_handler(msg):
 
             if selected_id and selected_agent:
                 log.info(f'Removing agent {selected_agent}')
-                selected_agent.shutdown()
+
                 evt = f'{REMOVE_AGENT}:{selected_id}'
                 commands.append(evt)
+
+                selected_agent.shutdown()
+
+                while is_environment_busy():
+                    pass
+
                 on_environment_event(evt)
+
                 # agents.pop(selected_id)
                 log.info(f'Removed agent {selected_agent}')
 
 
 def change_constraint_handler(msg):
     event_delay()
-    commands.append(CHANGE_CONSTRAINT)
     coefficients = random.sample(range(1, 10), 3)
 
     if agents:
         selected_id = random.choice(list(agents.keys()))
         selected_agent = agents[selected_id]
         selected_neighbor = selected_agent.select_random_neighbor()
-        selected_agent.change_constraint(coefficients, selected_neighbor)
+
         evt = f'{CHANGE_CONSTRAINT}:{selected_id}-{selected_neighbor}:' + '-'.join([str(v) for v in coefficients])
         commands.append(evt)
+
+        selected_agent.change_constraint(coefficients, selected_neighbor)
+
+        while is_environment_busy():
+            pass
+
         on_environment_event(evt)
 
 
@@ -188,16 +241,20 @@ def play_simulation_handler(msg):
             handler({
                 'num_agents': 1,
             })
-            time.sleep(1)
+            time.sleep(3)
     log.info('End of simulation')
 
 
 def save_simulation_metrics_handler(msg):
     os.makedirs('metrics', exist_ok=True)
-    label = datetime.datetime.now().timestamp()
+    label = dcop_algorithm.name + '-' + date_to_string()
     metrics_file = os.path.join('metrics/', f'{label}.csv')
-    MetricsTable.to_csv(metrics_file)
+    to_csv(metrics_file)
     log.info(f'Metrics saved at {metrics_file}')
+
+
+def date_to_string():
+    return datetime.datetime.now().strftime('%m-%d-%Y-%H-%M-%S')
 
 
 def on_environment_event(evt):
@@ -205,35 +262,37 @@ def on_environment_event(evt):
     last_event = evt
     last_event_date_time = datetime.datetime.now()
 
+    agents_cost = {}
+    agents_num_msgs = {}
+
     for node in agents.values():
-        node.clear_messages_count()
+        if not node.terminate and node.cost:
+            agents_cost[node] = node.cost
+            agents_num_msgs[node] = node.messages_count
+
+            node.clear_messages_count()
+            node.clear_cost()
+
+    costs_per_event[evt] = sum(agents_cost.values())
+    num_mgs_per_event[evt] = sum(agents_num_msgs.values())
 
 
-class MetricsTable:
-    cost = {}
-    message_count = {}
-
-    @classmethod
-    def update_metrics(cls):
-        messages_count = 0
-        total_cost = 0
+def is_environment_busy():
+    if len(agents) > 0:
         for node in agents.values():
-            if not node.terminate:
-                messages_count += node.messages_count
-                total_cost += node.cost
+            if not node.terminate and node.cost is None:
+                return True
+    return False
 
-        cls.cost[last_event] = total_cost
-        cls.message_count[last_event] = messages_count
 
-    @classmethod
-    def to_csv(cls, path):
-        df = pd.DataFrame({
-            'event': list(cls.cost.keys()),
-            'type': [evt.split(':')[0] for evt in cls.cost.keys()],
-            'cost': list(cls.cost.values()),
-            'message_count': list(cls.message_count.values()),
-        })
-        df.to_csv(path, index=False)
+def to_csv(path):
+    df = pd.DataFrame({
+        'event': list(costs_per_event.keys()),
+        'type': [evt.split(':')[0] for evt in costs_per_event.keys()],
+        'cost': list(costs_per_event.values()),
+        'message_count': list(num_mgs_per_event.values()),
+    })
+    df.to_csv(path, index=False)
 
 
 directory = {
