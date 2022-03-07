@@ -27,6 +27,7 @@ CHANGE_CONSTRAINT = 'change_constraint'
 last_event = None
 last_event_date_time = None
 dcop_algorithm = None
+metrics_agent = None
 
 
 def create_and_start_agent(agent_id):
@@ -82,10 +83,12 @@ def add_agent_handler(msg):
                 _spawn_agent(nodes.pop(0))
     else:
         for _ in range(num_agents):
-            _spawn_agent(agent_id=count)
             evt = f'{ADD_AGENT}:{count}'
             commands.append(evt)
             on_environment_event(evt)
+
+            _spawn_agent(agent_id=count)
+
             count += 1
 
     # time.sleep(2)
@@ -98,6 +101,17 @@ def add_agent_handler(msg):
 def _spawn_agent(agent_id):
     t = threading.Thread(target=create_and_start_agent, args=(str(agent_id),))
     agent_id_to_thread[agent_id] = t
+    t.start()
+
+
+def create_and_start_metrics_agent():
+    global metrics_agent
+    metrics_agent = agent.MetricsAgent()
+    metrics_agent()
+
+
+def start_metrics_agent():
+    t = threading.Thread(target=create_and_start_metrics_agent)
     t.start()
 
 
@@ -119,10 +133,12 @@ def remove_agent_handler(msg):
 
             if selected_id and selected_agent:
                 log.info(f'Removing agent {selected_agent}')
-                selected_agent.shutdown()
+
                 evt = f'{REMOVE_AGENT}:{selected_id}'
                 commands.append(evt)
                 on_environment_event(evt)
+
+                selected_agent.shutdown()
                 # agents.pop(selected_id)
                 log.info(f'Removed agent {selected_agent}')
 
@@ -136,10 +152,12 @@ def change_constraint_handler(msg):
         selected_id = random.choice(list(agents.keys()))
         selected_agent = agents[selected_id]
         selected_neighbor = selected_agent.select_random_neighbor()
-        selected_agent.change_constraint(coefficients, selected_neighbor)
+
         evt = f'{CHANGE_CONSTRAINT}:{selected_id}-{selected_neighbor}:' + '-'.join([str(v) for v in coefficients])
         commands.append(evt)
         on_environment_event(evt)
+
+        selected_agent.change_constraint(coefficients, selected_neighbor)
 
 
 def agent_report_handler(msg):
@@ -219,6 +237,9 @@ def on_environment_event(evt):
     last_event = evt
     last_event_date_time = datetime.datetime.now()
 
+    if metrics_agent:
+        metrics_agent.set_event(last_event)
+
     for node in agents.values():
         node.clear_messages_count()
 
@@ -238,8 +259,6 @@ class MetricsTable:
 
         cls.cost[last_event] = total_cost
         cls.message_count[last_event] = messages_count
-        print(cls.cost)
-        print(cls.message_count)
 
     @classmethod
     def to_csv(cls, path):

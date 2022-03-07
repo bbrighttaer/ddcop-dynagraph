@@ -10,6 +10,7 @@ AGENTS_CHANNEL = f'{config.DOMAIN}.agent'  # for agent-to-agent communication
 MONITORING_CHANNEL = f'{config.DOMAIN}.monitoring'  # for agent-to-dashboard monitoring communication
 DASHBOARD_COMMAND_CHANNEL = f'{config.DOMAIN}.command.dashboard'  # for dashboard-to-factory command msgs
 FACTORY_COMMAND_CHANNEL = f'{config.DOMAIN}.command.factory'  # for factory-to-agent msgs
+METRICS_CHANNEL = f'{config.DOMAIN}.metrics'
 
 # dashboard command message types
 TEST = 'TEST'
@@ -46,6 +47,8 @@ AGENT_RESET = 'AGENT_RESET'
 AGENT_STATE_CHANGED = 'AGENT_STATE_CHANGED'
 AGENT_SHUTDOWN = 'AGENT_SHUTDOWN'
 AGENT_REPORT = 'AGENT_REPORT'
+
+METRICS_REPORT = 'METRICS_REPORT'
 
 # C-CoCoA message types
 UPDATE_STATE_MESSAGE = 'UpdateStateMsg'
@@ -171,3 +174,7 @@ def create_value_message(data):
 
 def create_util_message(data):
     return _create_msg(UTIL_MESSAGE, data)
+
+
+def create_metrics_report(data):
+    return _create_msg(METRICS_REPORT, data)

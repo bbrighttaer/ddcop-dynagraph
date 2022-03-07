@@ -15,9 +15,13 @@ from algorithms import dcop
 from algorithms import graph
 
 
+def parse_amqp_body(body):
+    return eval(body.decode('utf-8').replace('true', 'True').replace('false', 'False').replace('null', 'None'))
+
+
 def create_on_message(log, agent_id, handle_message, agent_snapshot):
     def on_message(ch, method, properties, body):
-        payload = eval(body.decode('utf-8').replace('true', 'True').replace('false', 'False').replace('null', 'None'))
+        payload = parse_amqp_body(body)
 
         # avoid own messages (no local is not supported ATM, see https://www.rabbitmq.com/specification.html)
         if 'agent_id' in payload['payload'] and payload['payload']['agent_id'] == agent_id:
@@ -168,6 +172,15 @@ class Agent:
         except Exception as e:
             self.log.info(f'Agent state report failed, retry: {str(e)}')
 
+    def report_metrics(self):
+        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                   routing_key=f'{messaging.METRICS_CHANNEL}',
+                                   body=messaging.create_metrics_report({
+                                       'agent_id': self.agent_id,
+                                       'cost': self.cost,
+                                       'num_messages': self.messages_count,
+                                   }))
+
     def agent_snapshot(self):
         snapshot = {
             'agent_id': self.agent_id,
@@ -296,6 +309,7 @@ class Agent:
         self.log.info('Initializing...')
 
         self.register_agent()
+        self.report_metrics()
 
         last_ping_call_time = None
 
@@ -360,3 +374,54 @@ class Agent:
 
     def __str__(self) -> str:
         return self.agent_id
+
+
+def create_metrics_on_message(metrics):
+    def on_message(ch, method, properties, body):
+        log = MetricsAgent.log
+        payload = parse_amqp_body(body)
+
+        log.info(f'Metrics received - {payload}, event - {metrics.event}')
+    return on_message
+
+
+class MetricsAgent:
+    log = logger.get_logger('metrics-agent')
+
+    def __init__(self):
+        self.agent_id = 'metrics-agent'
+        self.terminate = False
+
+        self.event = None
+        self.cost_dict = {}
+        self.message_count = {}
+
+        self.client = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL,
+                                                                        port=config.BROKER_PORT))
+        self.channel = self.client.channel()
+        self.queue = 'metrics-queue'
+        self.channel.queue_declare(self.queue, exclusive=True)
+        self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
+                                queue=self.queue,
+                                routing_key=f'{messaging.METRICS_CHANNEL}.#')
+        self.channel.basic_consume(queue=self.queue,
+                                   on_message_callback=create_metrics_on_message(self),
+                                   auto_ack=True)
+
+    def set_event(self, evt):
+        self.event = evt
+
+    def __call__(self, *args, **kwargs):
+        log = MetricsAgent.log
+        log.info('Metrics collection started')
+
+        while not self.terminate:
+            self.client.sleep(config.COMM_TIMEOUT)
+
+        log.info('Metrics collection stopped')
+        self.release_resources()
+
+    def release_resources(self):
+        self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
+                                  queue=self.queue,
+                                  routing_key=f'{messaging.METRICS_CHANNEL}.#')
