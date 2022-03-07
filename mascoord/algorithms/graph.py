@@ -136,10 +136,10 @@ class DynaGraph:
         sender_network = data['network']
 
         if self.network != sender_network and not self.busy:
-            self.responses.append(sender)
             self.busy = True
             if config.USE_PREDEFINED_NETWORK:
-                if f'{self.agent.agent_id},{sender}' in utils.coefficients_dict:
+                key = f'{self.agent.agent_id},{sender}'
+                if key in self.agent.coefficients_dict:
                     self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                                routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
                                                body=messaging.create_announce_response_message({
@@ -150,6 +150,7 @@ class DynaGraph:
                 else:
                     self.busy = False
             else:
+                self.responses.append(sender)
                 self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                            routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
                                            body=messaging.create_announce_response_message({
@@ -166,13 +167,14 @@ class DynaGraph:
         network = data['network']
         extra_args = data['extra_args']
 
+        key = f'{sender},{self.agent.agent_id}'
+        saved_sim = config.USE_PREDEFINED_NETWORK
+
         if not self.busy and not self.parent \
                 and not self.is_neighbor(sender) \
                 and sender not in self.responses \
                 and self.network != network \
-                and ((config.USE_PREDEFINED_NETWORK
-                      and f'{sender},{self.agent.agent_id}' in utils.coefficients_dict)
-                     or not config.USE_PREDEFINED_NETWORK):
+                and ((saved_sim and key in self.agent.coefficients_dict) or not saved_sim):
             self.busy = True
 
             self.log.debug('receive_announce_response_message' + str(self.responses))
@@ -230,13 +232,13 @@ class DynaGraph:
         data = payload['payload']
         sender = data['agent_id']
         connected = data['connected']
-        extra_args = data['extra_args']
 
         if connected and not self.is_neighbor(sender):
             constraint = self.agent.get_constraint(sender)
             self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
             self.children.append(sender)
             self.children_history.append(sender)
+            extra_args = data['extra_args']
             self.agent.connection_extra_args_callback(sender, extra_args)
 
             # inform dashboard about connection
@@ -257,7 +259,8 @@ class DynaGraph:
                 self.reset()
 
         # announce cycle is complete so remove this sender to allow future connections
-        self.responses.remove(sender)
+        if not config.USE_PREDEFINED_NETWORK:
+            self.responses.remove(sender)
         self.busy = False
 
     def receive_set_network_message(self, payload):

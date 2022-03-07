@@ -22,6 +22,7 @@ SAVE_SIMULATION = 'SAVE_SIMULATION'
 SAVED_SIMULATIONS_REPORT = 'SAVED_SIMULATIONS_REPORT'
 PLAY_SIMULATION = 'PLAY_SIMULATION'
 SAVE_METRICS = 'SAVE_METRICS'
+DCOP_ALGORITHM = 'DCOP_ALGORITHM'
 
 # agent channel message types
 ANNOUNCE_MSG = 'ANNOUNCE_MSG'
@@ -58,6 +59,7 @@ COST_MESSAGE = 'CostMessage'
 # SDPOP message types
 VALUE_MESSAGE = 'ValueMessage'
 UTIL_MESSAGE = 'UtilMessage'
+REQUEST_UTIL_MESSAGE = 'RequestUtilMessage'
 
 
 def _create_msg(msg_type, data):
@@ -178,3 +180,11 @@ def create_util_message(data):
 
 def create_metrics_report(data):
     return _create_msg(METRICS_REPORT, data)
+
+
+def create_dcop_algorithm_report(data):
+    return _create_msg(DCOP_ALGORITHM, data)
+
+
+def create_request_util_message(data):
+    return _create_msg(REQUEST_UTIL_MESSAGE, data)

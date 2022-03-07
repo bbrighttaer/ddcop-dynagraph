@@ -1,11 +1,11 @@
 import {io} from "socket.io-client";
 import {
     ADD_EDGE,
-    ADD_NODE,
+    ADD_NODE, CLEAR_GRAPH, CLEAR_MESSAGES,
     CONNECT,
     DISCONNECT, RECEIVED_MESSAGE,
     REMOVE_EDGE,
-    REMOVE_NODE, SET_ACTIVE_APP,
+    REMOVE_NODE, SET_ACTIVE_APP, SET_DCOP_ALGORITHM,
     SET_SAVED_SIMULATIONS, SET_SELECTED_MESSAGE_INDEX,
     SET_SHOW_MODAL
 } from "../actionTypes";
@@ -28,7 +28,8 @@ export function connect() {
 
             client.on(EVT_BROKER_TO_DASHBOARD, data => {
                 messageHandler(data, dispatch, addNode, removeNode, addEdge, removeEdge,
-                    setSavedSimulations, addMessage);
+                    setSavedSimulations, addMessage, setDCOPAlgorithm, clearGraph,
+                    clearMessages);
             })
         });
 
@@ -198,8 +199,8 @@ export function playSelectedSimulation(simulation) {
 export function setShowModal(status) {
     return (dispatch) => {
         dispatch({
-           type: SET_SHOW_MODAL,
-           showModal: status,
+            type: SET_SHOW_MODAL,
+            showModal: status,
         });
     }
 }
@@ -244,5 +245,26 @@ export function saveMetrics() {
         } else {
             console.log('Metrics could not be saved');
         }
+    }
+}
+
+export function setDCOPAlgorithm(dcop) {
+    return (dispatch) => {
+        dispatch({
+            type: SET_DCOP_ALGORITHM,
+            dcop,
+        });
+    }
+}
+
+export function clearGraph() {
+    return (dispatch) => {
+        dispatch({type: CLEAR_GRAPH});
+    }
+}
+
+export function clearMessages() {
+    return (dispatch) => {
+        dispatch({type: CLEAR_MESSAGES});
     }
 }

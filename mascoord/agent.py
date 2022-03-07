@@ -4,6 +4,7 @@ import random
 from traceback import print_exception
 import functools
 
+import pandas as pd
 import pika
 
 import config
@@ -68,6 +69,7 @@ class Agent:
         self.log = logger.get_logger(agent_id, prefix='Agent')
         self.terminate = False
         self.active_constraints = {}
+        self.coefficients_dict = kwargs['coefficients_dict'] if 'coefficients_dict' in kwargs else {}
 
         self.is_client_asleep = False
 
@@ -145,7 +147,7 @@ class Agent:
 
     def get_constraint(self, sender_id, coefficients: list = None):
         if not coefficients:
-            coefficients = utils.coefficients_dict.get(f'{self.agent_id},{sender_id}', [1, 1, 1])
+            coefficients = self.coefficients_dict.get(f'{self.agent_id},{sender_id}', [1, 1, 1])
         equation_class = equations.equations_directory['linear']
         constraint = equation_class(*coefficients)
         return constraint
@@ -177,29 +179,31 @@ class Agent:
                                    routing_key=f'{messaging.METRICS_CHANNEL}',
                                    body=messaging.create_metrics_report({
                                        'agent_id': self.agent_id,
-                                       'cost': self.cost,
+                                       'cost': float(self.cost),
                                        'num_messages': self.messages_count,
                                    }))
 
     def agent_snapshot(self):
         snapshot = {
             'agent_id': self.agent_id,
+            'domain': self.domain,
             'network': self.graph.network,
             'constraints': {k: str(v) for k, v in self.active_constraints.items()},
             'cpa': self.cpa,
             'state': self.state,
+            'cost': self.cost,
             'parent': self.parent,
             'pinged_list': self.graph.pinged_list_dict,
             'responses': list(self.graph.responses),
             'value': self.dcop.value,
             'busy': self.graph.busy,
         }
-        if isinstance(self.dcop, dcop.CCoCoA):
+        if self.dcop.name == 'c-cocoa':
             snapshot.update({
                 'neighbor_states': self.dcop.neighbor_states,
                 'cost_map': self.dcop.cost_map,
             })
-        elif isinstance(self.dcop, dcop.SDPOP):
+        elif self.dcop.name == 'sdpop':
             snapshot.update({
                 'neighbor_domains': self.dcop.neighbor_domains,
                 'util_messages': self.dcop.util_messages,
@@ -295,6 +299,9 @@ class Agent:
         elif message_type == messaging.UTIL_MESSAGE:
             self.dcop.receive_util_message(payload)
             self.increment_messages_count()
+        elif message_type == messaging.REQUEST_UTIL_MESSAGE:
+            self.dcop.receive_util_message_request(payload)
+            self.increment_messages_count()
 
         # elif message_type == messaging.AGENT_RESET:
         #     self.dcop.reset(payload=payload)
@@ -309,7 +316,6 @@ class Agent:
         self.log.info('Initializing...')
 
         self.register_agent()
-        self.report_metrics()
 
         last_ping_call_time = None
 
@@ -378,10 +384,9 @@ class Agent:
 
 def create_metrics_on_message(metrics):
     def on_message(ch, method, properties, body):
-        log = MetricsAgent.log
-        payload = parse_amqp_body(body)
+        body = parse_amqp_body(body)
+        metrics.record_agent_stats(body['payload'])
 
-        log.info(f'Metrics received - {payload}, event - {metrics.event}')
     return on_message
 
 
@@ -393,8 +398,11 @@ class MetricsAgent:
         self.terminate = False
 
         self.event = None
-        self.cost_dict = {}
-        self.message_count = {}
+        self.cost_per_agent = {}
+        self.num_msgs_per_agent = {}
+
+        self.costs_per_event = {}
+        self.num_mgs_per_event = {}
 
         self.client = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL,
                                                                         port=config.BROKER_PORT))
@@ -408,7 +416,16 @@ class MetricsAgent:
                                    on_message_callback=create_metrics_on_message(self),
                                    auto_ack=True)
 
+    def record_agent_stats(self, payload):
+        agent = payload['agent_id']
+        self.cost_per_agent[agent] = payload['cost']
+        self.num_msgs_per_agent[agent] = payload['num_messages']
+
     def set_event(self, evt):
+        if self.cost_per_agent:
+            self.record_metrics(self.event)
+            self.cost_per_agent.clear()
+            self.num_msgs_per_agent.clear()
         self.event = evt
 
     def __call__(self, *args, **kwargs):
@@ -425,3 +442,25 @@ class MetricsAgent:
         self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
                                   queue=self.queue,
                                   routing_key=f'{messaging.METRICS_CHANNEL}.#')
+
+    def record_metrics(self, event):
+        messages_count = 0
+        total_cost = 0
+        for cost, num_msgs in zip(self.cost_per_agent.values(), self.num_msgs_per_agent.values()):
+            total_cost += cost
+            messages_count += num_msgs
+        self.costs_per_event[event] = total_cost
+        self.num_mgs_per_event[event] = messages_count
+
+    def to_csv(self, path):
+        # record metrics for last event
+        self.record_metrics(self.event)
+
+        # save to file
+        df = pd.DataFrame({
+            'event': list(self.costs_per_event.keys()),
+            'type': [evt.split(':')[0] for evt in self.costs_per_event.keys()],
+            'cost': list(self.costs_per_event.values()),
+            'message_count': list(self.num_mgs_per_event.values()),
+        })
+        df.to_csv(path, index=False)

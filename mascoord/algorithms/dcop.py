@@ -11,8 +11,9 @@ class DCOP:
     Parent class for DCOP algorithms
     """
     traversing_order = None
+    name = 'dcop-base'
 
-    def __init__(self, agent, num_discrete_points=3, domain_lb=-50, domain_ub=50):
+    def __init__(self, agent, num_discrete_points=3, domain_lb=-5, domain_ub=5):
         self.log = agent.log
         self.agent = agent
         self.graph = self.agent.graph
@@ -41,8 +42,7 @@ class DCOP:
         # if this agent is a leaf node then it should report the cpa to dashboard
         if not self.agent.graph.children:
             self.send_cpa_to_dashboard()
-            from mascoord.handlers import MetricsTable
-            MetricsTable.update_metrics()
+        self.agent.report_metrics()
 
     def send_cpa_to_dashboard(self):
         self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
@@ -101,12 +101,16 @@ class DCOP:
         """
         pass
 
+    def __str__(self):
+        return 'dcop'
+
 
 class CCoCoA(DCOP):
     """
     Implementation of the C-CoCoA algorithm to work with dynamic interaction graph
     """
     traversing_order = 'top-down'
+    name = 'c-cocoa'
 
     IDLE = 'IDLE'
     DONE = 'DONE'
@@ -297,12 +301,16 @@ class CCoCoA(DCOP):
         if sender in self.graph.neighbors:
             self.neighbor_states[sender] = data['state']
 
+    def __str__(self):
+        return 'c-cocoa'
+
 
 class SDPOP(DCOP):
     """
     Implements the SDPOP algorithm
     """
     traversing_order = 'bottom-up'
+    name = 'sdpop'
 
     def __init__(self, *args, **kwargs):
         super(SDPOP, self).__init__(*args, **kwargs)
@@ -333,14 +341,8 @@ class SDPOP(DCOP):
         # children
         c_util_sum = np.array([0] * len(self.domain))
         for child in self.graph.children:
-            c_util = None
-            if child in self.util_messages:
-                c_util = self.util_messages[child]
-            elif child in self.util_messages_cache:
-                c_util = self.util_messages_cache[child]
-
-            if c_util:
-                c_util_sum += np.array(c_util)
+            c_util = self.util_messages[child]
+            c_util_sum += np.array(c_util)
 
         # parent
         if self.graph.parent:
@@ -357,15 +359,18 @@ class SDPOP(DCOP):
             self.send_util_message(self.graph.parent, x_j.tolist())
         else:
             utils = c_util_sum.reshape(-1, )
-            self.cost = utils.min()
-            self.value = utils.argmin()
-            self.cpa[f'agent-{self.agent.agent_id}'] = int(self.value)
+            self.cost = float(utils.min())
+            self.value = int(utils.argmin())
+            self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
             self.log.info(f'Cost is {self.cost}')
 
             # send value msgs to children
+            self.log.info(f'children: {self.graph.children}')
             for child in self.graph.children:
                 self.send_value_message(child, {'cpa': self.cpa})
+
+            self.collect_metrics()
 
         self._cache_util_msgs()
 
@@ -378,16 +383,23 @@ class SDPOP(DCOP):
 
     def can_resolve_agent_value(self) -> bool:
         # agent should have received util msgs from all children
-        return self.graph.neighbors \
-               and self.util_messages \
-               and len(self.util_messages) == len(self.graph.children)
+        can_resolve = self.graph.neighbors \
+                      and self.util_messages \
+                      and len(self.util_messages) == len(self.graph.children)
+
+        if not can_resolve and self.util_messages:
+            for child in self.graph.children:
+                if child not in self.util_messages:
+                    self.request_util_message(child)
+
+        return can_resolve
 
     def calculate_value(self):
         # calculate value and send VALUE messages and send to children
         self._compute_util_and_value()
 
     def _cache_util_msgs(self):
-        self.util_messages_cache = self.util_messages
+        self.util_messages_cache.update(self.util_messages)
         self.util_messages = {}
 
     def receive_util_message(self, payload):
@@ -419,9 +431,9 @@ class SDPOP(DCOP):
             parent_value = parent_cpa[f'agent-{sender}']
             self.cpa = parent_cpa
             x_i = self.X_ij[:, parent_value].reshape(-1, )
-            self.cost = x_i.min()
-            self.value = x_i.argmin()
-            self.cpa[f'agent-{self.agent.agent_id}'] = int(self.value)
+            self.cost = float(x_i.min())
+            self.value = int(x_i.argmin())
+            self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
             self.log.info(f'Cost is {self.cost}')
 
@@ -438,3 +450,21 @@ class SDPOP(DCOP):
                                              'agent_id': self.agent.agent_id,
                                              'value': value,
                                          }))
+
+    def request_util_message(self, child):
+        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                         routing_key=f'{messaging.AGENTS_CHANNEL}.{child}',
+                                         body=messaging.create_request_util_message({
+                                             'agent_id': self.agent.agent_id,
+                                         }))
+
+    def receive_util_message_request(self, payload):
+        self.log.info(f'Received util request message: {payload}')
+        data = payload['payload']
+        sender = data['agent_id']
+
+        if self.graph.is_neighbor(sender):
+            self._compute_util_and_value()
+
+    def __str__(self):
+        return 'sdpop'

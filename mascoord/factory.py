@@ -72,6 +72,13 @@ if __name__ == '__main__':
                                       'simulations': parsed_sim,
                                   }))
 
+        # report algorithm in use
+        channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                              routing_key=f'{messaging.MONITORING_CHANNEL}',
+                              body=messaging.create_dcop_algorithm_report({
+                                  'dcop': args.alg,
+                              }))
+
         channel.start_consuming()
     except ConnectionError as e:
         log.error(str(e))

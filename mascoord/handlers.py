@@ -32,13 +32,9 @@ metrics_agent = None
 
 def create_and_start_agent(agent_id):
     if dcop_algorithm:
-        # try:
-        dcop_agent = agent.Agent(agent_id, dcop_algorithm)
-        MetricsTable.update_metrics()
+        dcop_agent = agent.Agent(agent_id, dcop_algorithm, coefficients_dict=utils.coefficients_dict)
         agents[agent_id] = dcop_agent
         dcop_agent()
-        # except ValueError as e:
-        #     log.error(str(e))
     else:
         log.error('DCOP algorithm must be provided before creating an agent')
 
@@ -220,16 +216,21 @@ def play_simulation_handler(msg):
             handler({
                 'num_agents': 1,
             })
-            time.sleep(1)
+            time.sleep(3)
     log.info('End of simulation')
 
 
 def save_simulation_metrics_handler(msg):
     os.makedirs('metrics', exist_ok=True)
-    label = datetime.datetime.now().timestamp()
+    label = dcop_algorithm.name + '-' + date_to_string()
     metrics_file = os.path.join('metrics/', f'{label}.csv')
-    MetricsTable.to_csv(metrics_file)
-    log.info(f'Metrics saved at {metrics_file}')
+    if metrics_agent:
+        metrics_agent.to_csv(metrics_file)
+        log.info(f'Metrics saved at {metrics_file}')
+
+
+def date_to_string():
+    return datetime.datetime.now().strftime('%m-%d-%Y-%H-%M-%S')
 
 
 def on_environment_event(evt):
@@ -242,33 +243,6 @@ def on_environment_event(evt):
 
     for node in agents.values():
         node.clear_messages_count()
-
-
-class MetricsTable:
-    cost = {}
-    message_count = {}
-
-    @classmethod
-    def update_metrics(cls):
-        messages_count = 0
-        total_cost = 0
-        for node in agents.values():
-            if not node.terminate:
-                messages_count += node.messages_count
-                total_cost += node.cost
-
-        cls.cost[last_event] = total_cost
-        cls.message_count[last_event] = messages_count
-
-    @classmethod
-    def to_csv(cls, path):
-        df = pd.DataFrame({
-            'event': list(cls.cost.keys()),
-            'type': [evt.split(':')[0] for evt in cls.cost.keys()],
-            'cost': list(cls.cost.values()),
-            'message_count': list(cls.message_count.values()),
-        })
-        df.to_csv(path, index=False)
 
 
 directory = {
