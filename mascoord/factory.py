@@ -1,6 +1,7 @@
 import datetime
 import os
 import argparse
+import time
 
 import pika
 
@@ -10,9 +11,13 @@ import logger
 import messaging
 import random
 
+from mascoord.utils import time_since
+
 random.seed(0)
 
 log = logger.get_logger('Factory')
+
+start_time = time.time()
 
 
 def on_message(ch, method, properties, body):
@@ -23,6 +28,9 @@ def on_message(ch, method, properties, body):
         func(msg)
     else:
         log.warning(f'Message type {msg["type"]} has no handler')
+
+    sim_time = time_since(start_time)
+    log.info(f'Up time: {sim_time}')
 
 
 if __name__ == '__main__':
