@@ -29,6 +29,7 @@ metrics_agent = None
 
 costs_per_event = {}
 num_mgs_per_event = {}
+time_per_event = {}
 
 shared_metrics_dict = {}
 metrics_registry = []
@@ -247,20 +248,22 @@ def on_environment_event(evt):
 
     agents_cost = {}
     agents_num_msgs = {}
+    agents_time = {}
 
     for node in shared_metrics_dict:
         metrics = shared_metrics_dict[node]
+        agents_time[node] = metrics['time']
         agents_cost[node] = metrics['cost']
         agents_num_msgs[node] = metrics['num_messages']
 
     costs_per_event[evt] = sum(agents_cost.values())
     num_mgs_per_event[evt] = sum(agents_num_msgs.values())
+    time_per_event[evt] = sum(agents_time.values())
 
     log.info(f'Shared metrics dict: {shared_metrics_dict}')
     shared_metrics_dict.clear()
     metrics_registry.clear()
     log.info('Shared metrics dict cleared')
-
 
 
 def to_csv(path):
@@ -269,6 +272,7 @@ def to_csv(path):
         'type': [evt.split(':')[0] for evt in costs_per_event.keys()],
         'cost': list(costs_per_event.values()),
         'message_count': list(num_mgs_per_event.values()),
+        'time': list(time_per_event.values()),
     })
     df.to_csv(path, index=False)
 

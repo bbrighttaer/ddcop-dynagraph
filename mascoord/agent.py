@@ -2,6 +2,7 @@ import datetime
 import functools
 import json
 import random
+import time
 from traceback import print_exception
 
 import pandas as pd
@@ -12,6 +13,7 @@ import equations
 import logger
 import messaging
 from algorithms import graph
+from mascoord.utils import time_diff
 
 
 def parse_amqp_body(body):
@@ -74,6 +76,7 @@ class Agent:
         self.is_client_asleep = False
 
         self.messages_count = 0
+        self.start_time = None
 
         self.client = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL,
                                                                         port=config.BROKER_PORT))
@@ -192,12 +195,16 @@ class Agent:
 
     def dcop_done(self):
         self.metrics_dict[self.agent_id] = {
+            'time': time_diff(self.start_time),
             'cost': float(self.cost),
             'num_messages': self.messages_count,
         }
         self.log.info('DCOP done')
+
+        # reset for next computation
         self.clear_messages_count()
         self.clear_cost()
+        self.start_time = time.time()
 
     def agent_snapshot(self):
         snapshot = {
@@ -267,10 +274,12 @@ class Agent:
             self.increment_messages_count()
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG:
+            self.start_time = time.time()
             self.graph.receive_announce_response_message(payload)
             self.increment_messages_count()
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG_ACK:
+            self.start_time = time.time()
             self.graph.receive_announce_response_message_ack(payload)
             self.increment_messages_count()
 
