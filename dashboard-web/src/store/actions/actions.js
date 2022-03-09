@@ -102,42 +102,42 @@ export function removeEdge(edge) {
     }
 }
 
-export function addAgent() {
+export function addAgent(numAgents) {
     return (dispatch, getstate) => {
         const state = getstate();
         if (state.app.client) {
             const client = state.app.client;
             client?.emit(EVT_DASHBOARD_COMMAND_CHANNEL, {
                     type: MESSAGE.ADD_AGENT,
-                    num_agents: 1
+                    num_agents: Number(numAgents),
                 }
             );
         }
     }
 }
 
-export function removeAgent() {
+export function removeAgent(numAgents) {
     return (dispatch, getstate) => {
         const state = getstate();
         if (state.app.client) {
             const client = state.app.client;
             client?.emit(EVT_DASHBOARD_COMMAND_CHANNEL, {
                     type: MESSAGE.REMOVE_AGENT,
-                    num_agents: 1
+                    num_agents: Number(numAgents),
                 }
             );
         }
     }
 }
 
-export function changeConstraint() {
+export function changeConstraint(numAgents) {
     return (dispatch, getstate) => {
         const state = getstate();
         if (state.app.client) {
             const client = state.app.client;
             client?.emit(EVT_DASHBOARD_COMMAND_CHANNEL, {
                     type: MESSAGE.CHANGE_CONSTRAINT,
-                    num_agents: 1
+                    num_agents: Number(numAgents),
                 }
             );
         }

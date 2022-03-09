@@ -1,8 +1,8 @@
 import datetime
+import functools
 import json
 import random
 from traceback import print_exception
-import functools
 
 import pandas as pd
 import pika
@@ -11,8 +11,6 @@ import config
 import equations
 import logger
 import messaging
-import utils
-from algorithms import dcop
 from algorithms import graph
 
 
@@ -34,7 +32,7 @@ def create_on_message(log, agent_id, handle_message, agent_snapshot):
         try:
             handle_message(payload)
         except Exception as e:
-            log.info(f'Agent snapshot: f{agent_snapshot()}\nPayload: {payload}')
+            log.info(f'Agent snapshot: {agent_snapshot()}\nPayload: {payload}')
             print_exception(e)
 
     return on_message
@@ -70,6 +68,8 @@ class Agent:
         self.terminate = False
         self.active_constraints = {}
         self.coefficients_dict = kwargs['coefficients_dict'] if 'coefficients_dict' in kwargs else {}
+        self.metrics_dict = kwargs['metrics_dict']
+        self.metrics_registry = kwargs['metrics_registry']
 
         self.is_client_asleep = False
 
@@ -142,6 +142,10 @@ class Agent:
     def connection_extra_args(self):
         return self.dcop.connection_extra_args()
 
+    @property
+    def has_neighbor(self):
+        return bool(self.graph.neighbors)
+
     def agent_disconnection_callback(self, agent_id):
         self.dcop.agent_disconnection_callback(agent=agent_id)
 
@@ -186,6 +190,15 @@ class Agent:
                                        'num_messages': self.messages_count,
                                    }))
 
+    def dcop_done(self):
+        self.metrics_dict[self.agent_id] = {
+            'cost': float(self.cost),
+            'num_messages': self.messages_count,
+        }
+        self.log.info('DCOP done')
+        self.clear_messages_count()
+        self.clear_cost()
+
     def agent_snapshot(self):
         snapshot = {
             'agent_id': self.agent_id,
@@ -210,7 +223,6 @@ class Agent:
             snapshot.update({
                 'neighbor_domains': self.dcop.neighbor_domains,
                 'util_messages': self.dcop.util_messages,
-                'util_messages_cache': self.dcop.util_messages_cache,
             })
         return snapshot
 
@@ -326,17 +338,17 @@ class Agent:
             self.graph.connect()
 
             # process network events
-            self.client.sleep(config.COMM_TIMEOUT)
+            self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
 
             self.dcop.resolve_value()
 
             # check if neighbors should be pinged
             if not last_ping_call_time or datetime.datetime.now() > last_ping_call_time \
-                    + datetime.timedelta(seconds=config.PING_CALL_DELAY):
+                    + datetime.timedelta(seconds=config.PING_PROC_CALL_DELAY_IN_SECONDS):
                 self.graph.ping_neighbors()
 
                 # process network (ping) events
-                self.client.sleep(config.COMM_TIMEOUT)
+                self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
 
                 last_ping_call_time = datetime.datetime.now()
 
@@ -435,7 +447,7 @@ class MetricsAgent:
         log.info('Metrics collection started')
 
         while not self.terminate:
-            self.client.sleep(config.COMM_TIMEOUT)
+            self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
 
         log.info('Metrics collection stopped')
         self.release_resources()
