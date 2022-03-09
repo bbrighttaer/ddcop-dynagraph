@@ -1,5 +1,8 @@
 import datetime
+import math
 import os
+import time
+
 import yaml
 from paho.mqtt import client as mqtt
 
@@ -95,3 +98,14 @@ def reset_coefficients_dict_and_nodes_list(filename):
 
     print(f'coefficients_dict (len={len(coefficients_dict)}) '
           f'and nodes_list (len={len(nodes_list)}) have been successfully reset')
+
+
+def time_since(since):
+    s = time.time() - since
+    m = math.floor(s / 60)
+    s -= m * 60
+    return '%dm %ds' % (m, s)
+
+
+def time_diff(start_time):
+    return time.time() - start_time

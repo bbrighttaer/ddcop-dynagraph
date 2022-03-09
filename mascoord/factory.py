@@ -43,7 +43,7 @@ if __name__ == '__main__':
     try:
         connection = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL, port=config.BROKER_PORT))
         channel = connection.channel()
-        print('Connected to broker')
+        log.info('Connected to broker')
         channel.exchange_declare(exchange=messaging.COMM_EXCHANGE, exchange_type='topic')
 
         # factory queue
@@ -54,6 +54,9 @@ if __name__ == '__main__':
         channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
                            queue=queue_name,
                            routing_key=f'{messaging.DASHBOARD_COMMAND_CHANNEL}.#')
+        channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
+                           queue=queue_name,
+                           routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#')
 
         # subscribe to dashboard commands
         channel.basic_consume(queue=queue_name, on_message_callback=on_message, auto_ack=True)

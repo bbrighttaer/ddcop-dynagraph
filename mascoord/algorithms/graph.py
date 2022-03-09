@@ -4,8 +4,7 @@ import string
 
 from mascoord import config
 from mascoord import messaging
-from mascoord import utils
-from mascoord.config import MAX_PING_ALLOWANCE
+from mascoord.config import MAX_PING_COUNT
 
 
 class DynaGraph:
@@ -69,7 +68,7 @@ class DynaGraph:
         temp_list = list(self.pinged_list_dict.keys())
 
         for agent in temp_list:
-            if self.pinged_list_dict[agent] >= MAX_PING_ALLOWANCE:
+            if self.pinged_list_dict[agent] >= MAX_PING_COUNT:
                 # remove constraint
                 self.agent.active_constraints.pop(f'{self.agent.agent_id},{agent}')
 
@@ -288,9 +287,6 @@ class DynaGraph:
                 self.pinged_list_dict[agent] = 1
             else:
                 self.pinged_list_dict[agent] += 1
-
-        # wait to hear from neighbors
-        # self.client.sleep(config.PING_TIMEOUT)
 
         # remove agents that are no longer connected (we didn't hear from them)
         if self.pinged_list_dict:
