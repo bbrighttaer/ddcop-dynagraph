@@ -14,11 +14,8 @@ import utils
 
 agents = {}
 agent_id_to_thread = {}
-terminated_agents = {}
 
 log = logger.get_logger('factory-handler')
-
-num_agents_count = 0
 
 commands = []
 
@@ -64,29 +61,27 @@ def test_msg_handler(msg):
 
 
 def add_agent_handler(msg):
-    global num_agents_count
-
     num_agents = msg['num_agents']
     log.info(f'Number of agents to add = {num_agents}')
     if config.USE_PREDEFINED_NETWORK:
         nodes = utils.nodes_list
         for _ in range(num_agents):
-            evt = f'{ADD_AGENT}:{num_agents_count}'
+            agent_id = nodes.pop(0)
+            evt = f'{ADD_AGENT}:{agent_id}'
             commands.append(evt)
 
             if nodes:
-                _spawn_agent(nodes.pop(0))
+                _spawn_agent(agent_id)
                 on_environment_event(evt)
-                num_agents_count += 1
     else:
         for i in range(num_agents):
-            evt = f'{ADD_AGENT}:{num_agents_count}'
+            agent_id = len(agents)
+            evt = f'{ADD_AGENT}:{agent_id}'
             commands.append(evt)
 
-            _spawn_agent(agent_id=num_agents_count)
-            log.info(f'agent {num_agents_count} added')
+            _spawn_agent(agent_id=agent_id)
+            log.info(f'agent {agent_id} added')
             on_environment_event(evt)
-            num_agents_count += 1
 
     # time.sleep(2)
     # client.publish(f'{messaging.FACTORY_COMMAND_CHANNEL}/',
@@ -133,7 +128,6 @@ def remove_agent_handler(msg):
                 commands.append(evt)
 
                 selected_agent.shutdown()
-                terminated_agents[selected_id] = selected_agent
 
                 on_environment_event(evt)
 
@@ -267,13 +261,6 @@ def on_environment_event(evt):
     metrics_registry.clear()
     log.info('Shared metrics dict cleared')
 
-
-def is_environment_busy():
-    time.sleep(1)
-    print(f'{agents} {shared_metrics_dict} {terminated_agents}')
-    flag = len(agents) > 1 and 0 < len(shared_metrics_dict) != (len(agents) - len(terminated_agents))
-    print(flag)
-    return flag
 
 
 def to_csv(path):

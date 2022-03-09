@@ -41,7 +41,12 @@ if __name__ == '__main__':
     handlers.set_dcop_algorithm(args.alg)
 
     try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL, port=config.BROKER_PORT))
+        connection = pika.BlockingConnection(pika.ConnectionParameters(
+            host=config.BROKER_URL,
+            port=config.BROKER_PORT,
+            heartbeat=0,  # only for experiment purposes - not recommended (https://www.rabbitmq.com/heartbeats.html)
+            credentials=pika.credentials.PlainCredentials(config.PIKA_USERNAME, config.PIKA_PASSWORD))
+        )
         channel = connection.channel()
         log.info('Connected to broker')
         channel.exchange_declare(exchange=messaging.COMM_EXCHANGE, exchange_type='topic')

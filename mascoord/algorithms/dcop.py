@@ -13,7 +13,7 @@ class DCOP:
     traversing_order = None
     name = 'dcop-base'
 
-    def __init__(self, agent, num_discrete_points=3, domain_lb=-50, domain_ub=50):
+    def __init__(self, agent, num_discrete_points=40, domain_lb=-50, domain_ub=50):
         self.log = agent.log
         self.agent = agent
         self.graph = self.agent.graph
