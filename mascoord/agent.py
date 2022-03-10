@@ -76,7 +76,8 @@ class Agent:
         self.is_client_asleep = False
 
         self.messages_count = 0
-        self.start_time = None
+        self.start_time = time.time()
+        self.accum_time = 0
 
         self.client = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL,
                                                                         port=config.BROKER_PORT))
@@ -104,7 +105,7 @@ class Agent:
 
         # algorithms
         self.graph = graph.DynaGraph(self)
-        self.dcop = dcop_algorithm(self)
+        self.dcop = dcop_algorithm(self, num_discrete_points=kwargs['domain_size'])
 
     @property
     def graph_traversing_order(self):
@@ -193,9 +194,15 @@ class Agent:
                                        'num_messages': self.messages_count,
                                    }))
 
+    def _start_time(self):
+        self.start_time = time.time()
+
+    def _time_lapse(self):
+        self.accum_time = time_diff(self.start_time)
+
     def dcop_done(self):
         self.metrics_dict[self.agent_id] = {
-            'time': time_diff(self.start_time),
+            'time': self.accum_time,
             'cost': float(self.cost),
             'num_messages': self.messages_count,
         }
@@ -204,7 +211,8 @@ class Agent:
         # reset for next computation
         self.clear_messages_count()
         self.clear_cost()
-        self.start_time = time.time()
+        self._start_time()
+        self.accum_time = 0
 
     def agent_snapshot(self):
         snapshot = {
@@ -274,12 +282,10 @@ class Agent:
             self.increment_messages_count()
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG:
-            self.start_time = time.time()
             self.graph.receive_announce_response_message(payload)
             self.increment_messages_count()
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG_ACK:
-            self.start_time = time.time()
             self.graph.receive_announce_response_message_ack(payload)
             self.increment_messages_count()
 
@@ -312,9 +318,9 @@ class Agent:
             self.dcop.receive_inquiry_message(payload)
             self.increment_messages_count()
 
-        elif message_type == messaging.COST_MESSAGE:
-            self.dcop.receive_cost_message(payload)
-            self.increment_messages_count()
+        # elif message_type == messaging.COST_MESSAGE:
+        #     self.dcop.receive_cost_message(payload)
+        #     self.increment_messages_count()
 
         # SDPOP message handling
         elif message_type == messaging.VALUE_MESSAGE:
@@ -347,7 +353,7 @@ class Agent:
             self.graph.connect()
 
             # process network events
-            self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
+            self.listen_to_network()
 
             self.dcop.resolve_value()
 
@@ -357,13 +363,18 @@ class Agent:
                 self.graph.ping_neighbors()
 
                 # process network (ping) events
-                self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
+                self.listen_to_network()
 
                 last_ping_call_time = datetime.datetime.now()
 
         self.log.info('Shutting down...')
 
         self.release_resources()
+
+    def listen_to_network(self):
+        self._time_lapse()
+        self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
+        self._start_time()
 
     def release_resources(self):
         # inform dashboard

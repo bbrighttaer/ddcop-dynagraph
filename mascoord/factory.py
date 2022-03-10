@@ -44,9 +44,17 @@ if __name__ == '__main__':
         required=True,
         help='The DCOP algorithm to be used with the Dynamic Graph algorithm',
     )
+    parser.add_argument(
+        '-d',
+        '--domain_size',
+        type=int,
+        required=True,
+        help='The number of discrete points in the domain of the agent',
+    )
 
     args = parser.parse_args()
     handlers.set_dcop_algorithm(args.alg)
+    handlers.set_domain_size(args.domain_size)
 
     try:
         connection = pika.BlockingConnection(pika.ConnectionParameters(
@@ -56,7 +64,7 @@ if __name__ == '__main__':
             credentials=pika.credentials.PlainCredentials(config.PIKA_USERNAME, config.PIKA_PASSWORD))
         )
         channel = connection.channel()
-        log.info('Connected to broker')
+        log.info(f'Connected to broker, domain_size = {handlers.domain_size}')
         channel.exchange_declare(exchange=messaging.COMM_EXCHANGE, exchange_type='topic')
 
         # factory queue

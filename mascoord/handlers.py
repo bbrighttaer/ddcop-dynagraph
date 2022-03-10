@@ -34,13 +34,16 @@ time_per_event = {}
 shared_metrics_dict = {}
 metrics_registry = []
 
+domain_size = 2
+
 
 def create_and_start_agent(agent_id):
     if dcop_algorithm:
         dcop_agent = agent.Agent(agent_id, dcop_algorithm,
                                  coefficients_dict=utils.coefficients_dict,
                                  metrics_dict=shared_metrics_dict,
-                                 metrics_registry=metrics_registry)
+                                 metrics_registry=metrics_registry,
+                                 domain_size=domain_size)
         agents[agent_id] = dcop_agent
         dcop_agent()
     else:
@@ -55,6 +58,11 @@ def set_dcop_algorithm(alg):
         'c-cocoa': CCoCoA,
         'sdpop': SDPOP,
     }.get(alg)
+
+
+def set_domain_size(size):
+    global domain_size
+    domain_size = size
 
 
 def test_msg_handler(msg):
@@ -216,9 +224,9 @@ def play_simulation_handler(msg):
     log.info('End of simulation')
 
 
-def save_simulation_metrics_handler(msg):
+def save_simulation_metrics_handler(msg=None):
     os.makedirs('metrics', exist_ok=True)
-    label = dcop_algorithm.name + '-' + date_to_string()
+    label = f'{dcop_algorithm.name}-d{domain_size}'
     metrics_file = os.path.join('metrics/', f'{label}.csv')
     to_csv(metrics_file)
     log.info(f'Metrics saved at {metrics_file}')
@@ -231,7 +239,7 @@ def dcop_done_handler(msg):
     log.info(f'Done dict: {shared_metrics_dict}')
 
 
-def date_to_string():
+def current_datetime():
     return datetime.datetime.now().strftime('%m-%d-%Y-%H-%M-%S')
 
 
@@ -264,6 +272,7 @@ def on_environment_event(evt):
     shared_metrics_dict.clear()
     metrics_registry.clear()
     log.info('Shared metrics dict cleared')
+    save_simulation_metrics_handler()
 
 
 def to_csv(path):
