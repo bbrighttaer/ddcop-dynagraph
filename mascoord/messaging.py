@@ -23,6 +23,7 @@ SAVED_SIMULATIONS_REPORT = 'SAVED_SIMULATIONS_REPORT'
 PLAY_SIMULATION = 'PLAY_SIMULATION'
 SAVE_METRICS = 'SAVE_METRICS'
 DCOP_ALGORITHM = 'DCOP_ALGORITHM'
+DISCONNECTION_MESSAGE = 'DISCONNECTION_MESSAGE'
 
 # factory-agent command message types
 DCOP_DONE = 'DCOP_DONE'
@@ -192,5 +193,10 @@ def create_dcop_algorithm_report(data):
 def create_request_util_message(data):
     return _create_msg(REQUEST_UTIL_MESSAGE, data)
 
+
 def create_dcop_done_message(data):
     return _create_msg(DCOP_DONE, data)
+
+
+def create_disconnection_message(data):
+    return _create_msg(DISCONNECTION_MESSAGE, data)
