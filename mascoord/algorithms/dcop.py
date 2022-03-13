@@ -4,6 +4,7 @@ import numpy as np
 
 from mascoord import config
 from mascoord import messaging
+from mascoord.handlers import MetricsTable
 
 
 class DCOP:
@@ -13,7 +14,7 @@ class DCOP:
     traversing_order = None
     name = 'dcop-base'
 
-    def __init__(self, agent, num_discrete_points=40, domain_lb=-50, domain_ub=50):
+    def __init__(self, agent, num_discrete_points, domain_lb=-50, domain_ub=50):
         self.log = agent.log
         self.agent = agent
         self.graph = self.agent.graph
@@ -23,7 +24,7 @@ class DCOP:
         self.state = None
         self.value = None
         self.cpa = {}
-        self.cost = None
+        self.cost = 0
 
     def calculate_and_report_cost(self, best_params):
         """
@@ -39,11 +40,11 @@ class DCOP:
         self.collect_metrics()
 
     def collect_metrics(self):
+        self.log.info('DCOP done')
         # if this agent is a leaf node then it should report the cpa to dashboard
         if not self.agent.graph.children:
             self.send_cpa_to_dashboard()
-        # self.agent.report_metrics()
-        self.agent.dcop_done()
+        self.agent.metrics.update_metrics()
 
     def send_cpa_to_dashboard(self):
         self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
@@ -74,7 +75,7 @@ class DCOP:
         """
         pass
 
-    def agent_disconnection_callback(self, disconnected_agent):
+    def agent_disconnection_callback(self, agent):
         """
         Handles agent disconnection side-effects
         """
@@ -134,7 +135,6 @@ class CCoCoA(DCOP):
 
         for agent in self.graph.neighbors:
             # if agent in self.graph.children:
-            #     self.agent.metrics_registry.append(agent)
             #     self.send_update_state_message(agent, {
             #         'agent_id': self.agent.agent_id,
             #         'state': self.state,
@@ -149,7 +149,6 @@ class CCoCoA(DCOP):
         when value is set, send an UpdateStateMessage({agent_id, state=DONE, value})
         :return:
         """
-        self.agent.metrics_registry.append(self.agent.agent_id)
         total_cost_dict = {}
 
         # perform dcop computations
@@ -196,7 +195,6 @@ class CCoCoA(DCOP):
 
         # update children
         for child in self.graph.children:
-            self.agent.metrics_registry.append(child)
             self.send_update_state_message(child, {
                 'agent_id': self.agent.agent_id,
                 'state': self.state,
@@ -236,12 +234,14 @@ class CCoCoA(DCOP):
                                          }))
 
     def receive_cost_message(self, payload):
+        self.log.info(f'Received cost message: {payload}')
         data = payload['payload']
         sender = data['agent_id']
         cost_map = data['cost_map']
         self.cost_map[sender] = cost_map
 
     def receive_inquiry_message(self, payload):
+        self.log.info(f'Received inquiry message: {payload}')
         data = payload['payload']
         sender = data['agent_id']
         sender_domain = data['domain']
@@ -269,6 +269,7 @@ class CCoCoA(DCOP):
             self.send_cost_message(sender, {'agent_id': self.agent.agent_id, 'cost_map': cost_map})
 
     def receive_update_state_message(self, payload):
+        self.log.info(f'Received update state message: {payload}')
         data = payload['payload']
         sender = data['agent_id']
         if sender in self.graph.neighbors:
@@ -338,17 +339,13 @@ class SDPOP(DCOP):
 
     def _compute_util_and_value(self):
         # children
-        c_util_sum = np.array([0] * len(self.domain))
+        c_util_sum = np.array([0.] * len(self.domain))
         for child in self.graph.children:
-            self.agent.metrics_registry.append(child)
-
             c_util = self.util_messages[child]
             c_util_sum += np.array(c_util)
 
         # parent
         if self.graph.parent:
-            self.agent.metrics_registry.append(self.graph.parent)
-
             p_domain = self.neighbor_domains[self.graph.parent]
 
             x = np.array(self.domain).reshape(-1, 1)
@@ -361,8 +358,6 @@ class SDPOP(DCOP):
 
             self.send_util_message(self.graph.parent, x_j.tolist())
         else:
-            self.agent.metrics_registry.append(self.agent.agent_id)
-
             utils = c_util_sum.reshape(-1, )
             self.cost = float(utils.min())
             self.value = int(utils.argmin())
@@ -424,8 +419,6 @@ class SDPOP(DCOP):
 
         # determine own value from parent's value
         if self.graph.is_parent(sender) and self.X_ij is not None:
-            self.agent.metrics_registry.append(self.agent.agent_id)
-
             parent_cpa = value['cpa']
             parent_value = parent_cpa[f'agent-{sender}']
             self.cpa = parent_cpa

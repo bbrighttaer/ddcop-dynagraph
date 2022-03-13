@@ -6,7 +6,6 @@ import time
 import pika
 
 import config
-import handlers
 import logger
 import messaging
 import random
@@ -22,6 +21,7 @@ start_time = time.time()
 
 def on_message(ch, method, properties, body):
     msg = eval(body.decode('utf-8'))
+    from mascoord import handlers
     func = handlers.directory.get(msg['type'], None)
 
     if func:
@@ -44,9 +44,18 @@ if __name__ == '__main__':
         required=True,
         help='The DCOP algorithm to be used with the Dynamic Graph algorithm',
     )
+    parser.add_argument(
+        '-d',
+        '--domain_size',
+        type=int,
+        required=True,
+        help='The number of discrete points in the domain of the agent',
+    )
 
     args = parser.parse_args()
+    from mascoord import handlers
     handlers.set_dcop_algorithm(args.alg)
+    handlers.set_domain_size(args.domain_size)
 
     try:
         connection = pika.BlockingConnection(pika.ConnectionParameters(
@@ -56,7 +65,7 @@ if __name__ == '__main__':
             credentials=pika.credentials.PlainCredentials(config.PIKA_USERNAME, config.PIKA_PASSWORD))
         )
         channel = connection.channel()
-        log.info('Connected to broker')
+        log.info(f'Connected to broker, domain_size = {handlers.domain_size}')
         channel.exchange_declare(exchange=messaging.COMM_EXCHANGE, exchange_type='topic')
 
         # factory queue

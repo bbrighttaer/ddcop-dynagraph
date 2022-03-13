@@ -22,10 +22,6 @@ function SimulationPanel() {
 
     const [numAgents, setNumAgents] = useState(1);
     const handleNumAgentsChange = (e) => setNumAgents(e.target.value)
-    const numAgentOptions = [];
-    for (let i = 1; i <= 100; i++) {
-        numAgentOptions.push(<option key={i} value={i}>{i}</option>);
-    }
 
     const nodes = useSelector(state => state.graph.nodes);
     const edges = useSelector(state => state.graph.edges);
@@ -49,11 +45,11 @@ function SimulationPanel() {
                         <span>Add Agents</span>
                     </Button>
                     <label htmlFor="numAgentsSelect">Num. of agents: </label>
-                    <Select
-                        value={numAgents}
-                        onChange={handleNumAgentsChange}>
-                        {numAgentOptions}
-                    </Select>
+                    <input type="Number" min="0"
+                           value={numAgents}
+                           onChange={handleNumAgentsChange}
+                           style={{width:'50px'}}
+                    />
                 </div>
 
                 <Button onClick={handleRemoveAgent}>

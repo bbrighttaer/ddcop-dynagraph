@@ -108,4 +108,4 @@ def time_since(since):
 
 
 def time_diff(start_time):
-    return round(time.time() - start_time)
+    return (time.time() - start_time) * 1000
