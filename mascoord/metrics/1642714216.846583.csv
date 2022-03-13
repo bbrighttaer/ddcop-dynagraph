@@ -1,8 +1,0 @@
-event,type,cost,message_count
-add_agent:0,add_agent,0.0,0
-add_agent:1,add_agent,14.884425839205738,15
-add_agent:2,add_agent,40.600029428521495,26
-add_agent:3,add_agent,139.4721352908759,38
-add_agent:4,add_agent,138.90249706536093,55
-remove_agent:1,remove_agent,150.75058124978867,100
-add_agent:5,add_agent,157.01520650606616,32

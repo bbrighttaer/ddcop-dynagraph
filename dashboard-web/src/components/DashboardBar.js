@@ -5,12 +5,15 @@ import offline from '../assets/offline.svg';
 import poweron from '../assets/poweron-icon.svg';
 import poweroff from '../assets/poweroff-icon.svg';
 import moment from 'moment';
+import {useSelector} from "react-redux";
 
 function DashboardBar({isConnected, handleConnect, handleDisconnect}) {
     const dateStr = moment().format('ll');
+    const dcop_alg = useSelector(state => state.app.dcop);
 
     return (
         <Content>
+            {dcop_alg && <h3>{`DCOP algorithm in use: ${dcop_alg}`}</h3>}
             <DateArea>
                 <img src={calendar} alt=""/>
                 <span>{dateStr}</span>

@@ -21,10 +21,12 @@ export const MESSAGE = {
     SAVED_SIMULATIONS_REPORT: 'SAVED_SIMULATIONS_REPORT',
     PLAY_SIMULATION: 'PLAY_SIMULATION',
     SAVE_METRICS: 'SAVE_METRICS',
+    DCOP_ALGORITHM: 'DCOP_ALGORITHM',
 };
 
 export function messageHandler(message, dispatch, addNode, removeNode, addEdge,
-                               removeEdge, setSavedSimulations, addMessage) {
+                               removeEdge, setSavedSimulations, addMessage, setDCOPAlg,
+                               clearGraph, clearMessages) {
     //Called each time a message is received
     console.log('Received message:', message, typeof message);
     dispatch(
@@ -68,5 +70,11 @@ export function messageHandler(message, dispatch, addNode, removeNode, addEdge,
         );
     } else if (type === MESSAGE.SAVED_SIMULATIONS_REPORT) {
         dispatch(setSavedSimulations(payload.simulations));
+
+        // simulation report is received when sim is starting so clear buffers
+        dispatch(clearGraph());
+        dispatch(clearMessages());
+    } else if (type === MESSAGE.DCOP_ALGORITHM) {
+        dispatch(setDCOPAlg(payload.dcop));
     }
 }

@@ -46,9 +46,9 @@ class Equation:
 
 class Linear(Equation):
     name = 'linear'
-    formula = 'a * x^2 + b * x * y + c * y^2'
-    ddx_formula = '2 * a * x + b * y'
-    ddy_formula = 'b * x + 2 * c * y'
+    formula = ''
+    ddx_formula = ''
+    ddy_formula = ''
 
     def __init__(self, a, b, c):
         super(Linear, self).__init__(a=a, b=b, c=c)
@@ -56,9 +56,12 @@ class Linear(Equation):
 
 class Quadratic(Equation):
     name = 'quadratic'
-    formula = ''
-    ddx_formula = ''
-    ddy_formula = ''
+    formula = 'a * x^2 + b * x * y + c * y^2'
+    ddx_formula = '2 * a * x + b * y'
+    ddy_formula = 'b * x + 2 * c * y'
+
+    def __init__(self, a, b, c):
+        super(Quadratic, self).__init__(a=a, b=b, c=c)
 
 
 class Cubic(Equation):

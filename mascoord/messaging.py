@@ -9,7 +9,8 @@ COMM_EXCHANGE = f'{config.DOMAIN}.ddcop'
 AGENTS_CHANNEL = f'{config.DOMAIN}.agent'  # for agent-to-agent communication
 MONITORING_CHANNEL = f'{config.DOMAIN}.monitoring'  # for agent-to-dashboard monitoring communication
 DASHBOARD_COMMAND_CHANNEL = f'{config.DOMAIN}.command.dashboard'  # for dashboard-to-factory command msgs
-FACTORY_COMMAND_CHANNEL = f'{config.DOMAIN}.command.factory'  # for factory-to-agent msgs
+FACTORY_COMMAND_CHANNEL = f'{config.DOMAIN}.command.factory'  # for factory-agent msgs
+METRICS_CHANNEL = f'{config.DOMAIN}.metrics'
 
 # dashboard command message types
 TEST = 'TEST'
@@ -21,6 +22,11 @@ SAVE_SIMULATION = 'SAVE_SIMULATION'
 SAVED_SIMULATIONS_REPORT = 'SAVED_SIMULATIONS_REPORT'
 PLAY_SIMULATION = 'PLAY_SIMULATION'
 SAVE_METRICS = 'SAVE_METRICS'
+DCOP_ALGORITHM = 'DCOP_ALGORITHM'
+DISCONNECTION_MESSAGE = 'DISCONNECTION_MESSAGE'
+
+# factory-agent command message types
+DCOP_DONE = 'DCOP_DONE'
 
 # agent channel message types
 ANNOUNCE_MSG = 'ANNOUNCE_MSG'
@@ -47,10 +53,17 @@ AGENT_STATE_CHANGED = 'AGENT_STATE_CHANGED'
 AGENT_SHUTDOWN = 'AGENT_SHUTDOWN'
 AGENT_REPORT = 'AGENT_REPORT'
 
+METRICS_REPORT = 'METRICS_REPORT'
+
 # C-CoCoA message types
 UPDATE_STATE_MESSAGE = 'UpdateStateMsg'
 INQUIRY_MESSAGE = 'InquiryMessage'
 COST_MESSAGE = 'CostMessage'
+
+# SDPOP message types
+VALUE_MESSAGE = 'ValueMessage'
+UTIL_MESSAGE = 'UtilMessage'
+REQUEST_UTIL_MESSAGE = 'RequestUtilMessage'
 
 
 def _create_msg(msg_type, data):
@@ -159,3 +172,31 @@ def create_saved_simulations_report(data):
 
 def create_constraint_changed_message(data):
     return _create_msg(CONSTRAINT_CHANGED, data)
+
+
+def create_value_message(data):
+    return _create_msg(VALUE_MESSAGE, data)
+
+
+def create_util_message(data):
+    return _create_msg(UTIL_MESSAGE, data)
+
+
+def create_metrics_report(data):
+    return _create_msg(METRICS_REPORT, data)
+
+
+def create_dcop_algorithm_report(data):
+    return _create_msg(DCOP_ALGORITHM, data)
+
+
+def create_request_util_message(data):
+    return _create_msg(REQUEST_UTIL_MESSAGE, data)
+
+
+def create_dcop_done_message(data):
+    return _create_msg(DCOP_DONE, data)
+
+
+def create_disconnection_message(data):
+    return _create_msg(DISCONNECTION_MESSAGE, data)

@@ -17,8 +17,6 @@ agent_id_to_thread = {}
 
 log = logger.get_logger('factory-handler')
 
-count = 0
-
 commands = []
 
 ADD_AGENT = 'add_agent'
@@ -26,53 +24,75 @@ REMOVE_AGENT = 'remove_agent'
 CHANGE_CONSTRAINT = 'change_constraint'
 last_event = None
 last_event_date_time = None
+dcop_algorithm = None
+metrics_agent = None
+
+costs_per_event = {}
+num_mgs_per_event = {}
+time_per_event = {}
+
+domain_size = 2
 
 
 def create_and_start_agent(agent_id):
-    # try:
-    dcop_agent = agent.Agent(agent_id)
-    MetricsTable.update_metrics()
-    agents[agent_id] = dcop_agent
-    dcop_agent()
-    # except ValueError as e:
-    #     log.error(str(e))
+    if dcop_algorithm:
+        dcop_agent = agent.Agent(agent_id, dcop_algorithm,
+                                 coefficients_dict=utils.coefficients_dict,
+                                 domain_size=domain_size,
+                                 metrics=metrics)
+        agents[agent_id] = dcop_agent
+        dcop_agent()
+    else:
+        log.error('DCOP algorithm must be provided before creating an agent')
+
+
+def set_dcop_algorithm(alg):
+    from mascoord.algorithms.dcop import CCoCoA, SDPOP
+    global dcop_algorithm
+
+    dcop_algorithm = {
+        'c-cocoa': CCoCoA,
+        'sdpop': SDPOP,
+    }.get(alg)
+
+
+def set_domain_size(size):
+    global domain_size
+    domain_size = size
 
 
 def test_msg_handler(msg):
     print('This is a test message handler: ', msg)
 
 
-def check_inter_event_delay():
-    if last_event_date_time:
-        return last_event_date_time + datetime.timedelta(seconds=config.EVENT_DELAY) < datetime.datetime.now()
-    else:
-        return True
-
-
-def event_delay():
-    pass
-    # while not check_inter_event_delay():
-    #     pass
-
-
 def add_agent_handler(msg):
-    event_delay()
-
-    global count
-
     num_agents = msg['num_agents']
+    log.info(f'Number of agents to add = {num_agents}')
     if config.USE_PREDEFINED_NETWORK:
         nodes = utils.nodes_list
         for _ in range(num_agents):
-            if nodes:
-                _spawn_agent(nodes.pop(0))
-    else:
-        for _ in range(num_agents):
-            _spawn_agent(agent_id=count)
-            evt = f'{ADD_AGENT}:{count}'
+            agent_id = nodes[len(agents)]
+            evt = f'{ADD_AGENT}:{agent_id}'
             commands.append(evt)
-            on_environment_event(evt)
-            count += 1
+
+            metrics.last_event = evt
+            metrics.last_event_date_time = datetime.datetime.now()
+
+            _spawn_agent(agent_id)
+
+            time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
+    else:
+        for i in range(num_agents):
+            agent_id = len(agents)
+            evt = f'{ADD_AGENT}:{agent_id}'
+            commands.append(evt)
+
+            metrics.last_event = evt
+            metrics.last_event_date_time = datetime.datetime.now()
+
+            _spawn_agent(agent_id=agent_id)
+
+            time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
 
     # time.sleep(2)
     # client.publish(f'{messaging.FACTORY_COMMAND_CHANNEL}/',
@@ -88,44 +108,57 @@ def _spawn_agent(agent_id):
 
 
 def remove_agent_handler(msg):
-    event_delay()
-
     if agents:
         for i in range(msg['num_agents']):
             selected_id = None
             selected_agent = None
             found = False
 
-            timeout = 0
-            while not found and timeout <= len(agents):
-                selected_id = random.choice(list(agents.keys()))
+            if config.USE_PREDEFINED_NETWORK:
+                selected_id = msg['agent_id']
                 selected_agent = agents[selected_id]
-                found = not selected_agent.terminate
-                timeout += 1
+            else:
+                timeout = 0
+                while not found and timeout <= len(agents):
+                    selected_id = random.choice(list(agents.keys()))
+                    selected_agent = agents[selected_id]
+                    found = not selected_agent.terminate
+                    timeout += 1
 
             if selected_id and selected_agent:
                 log.info(f'Removing agent {selected_agent}')
-                selected_agent.shutdown()
+
                 evt = f'{REMOVE_AGENT}:{selected_id}'
                 commands.append(evt)
-                on_environment_event(evt)
+
+                metrics.last_event = evt
+                metrics.last_event_date_time = datetime.datetime.now()
+
+                selected_agent.shutdown()
+
+                time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
+
                 # agents.pop(selected_id)
                 log.info(f'Removed agent {selected_agent}')
 
 
 def change_constraint_handler(msg):
-    event_delay()
-    commands.append(CHANGE_CONSTRAINT)
-    coefficients = random.sample(range(1, 10), 3)
-
     if agents:
-        selected_id = random.choice(list(agents.keys()))
-        selected_agent = agents[selected_id]
-        selected_neighbor = selected_agent.select_random_neighbor()
-        selected_agent.change_constraint(coefficients, selected_neighbor)
-        evt = f'{CHANGE_CONSTRAINT}:{selected_id}-{selected_neighbor}:' + '-'.join([str(v) for v in coefficients])
-        commands.append(evt)
-        on_environment_event(evt)
+        for i in range(msg['num_agents']):
+            coefficients = [round(random.uniform(0, 1), 3) for _ in range(3)]
+            selected_id = random.choice(list(agents.keys()))
+            selected_agent = agents[selected_id]
+            selected_neighbor = selected_agent.select_random_neighbor()
+
+            evt = f'{CHANGE_CONSTRAINT}:{selected_id}-{selected_neighbor}:' + '-'.join([str(v) for v in coefficients])
+            commands.append(evt)
+
+            metrics.last_event = evt
+            metrics.last_event_date_time = datetime.datetime.now()
+
+            selected_agent.change_constraint(coefficients, selected_neighbor)
+
+            time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
 
 
 def agent_report_handler(msg):
@@ -182,39 +215,47 @@ def play_simulation_handler(msg):
     }
 
     for com in sim_commands:
-        handler = command_to_function.get(com.split(':')[0], None)
+        split = com.split(':')
+        handler = command_to_function.get(split[0], None)
         if handler:
             log.info(f'Running command: {com}')
             handler({
                 'num_agents': 1,
+                'agent_id': split[1],
             })
-            time.sleep(1)
     log.info('End of simulation')
 
 
-def save_simulation_metrics_handler(msg):
+def save_simulation_metrics_handler(msg=None):
     os.makedirs('metrics', exist_ok=True)
-    label = datetime.datetime.now().timestamp()
+    label = f'{dcop_algorithm.name}-d{domain_size}'
     metrics_file = os.path.join('metrics/', f'{label}.csv')
-    MetricsTable.to_csv(metrics_file)
+    metrics.to_csv(metrics_file)
     log.info(f'Metrics saved at {metrics_file}')
 
 
-def on_environment_event(evt):
-    global last_event, last_event_date_time
-    last_event = evt
-    last_event_date_time = datetime.datetime.now()
+def dcop_done_handler(msg):
+    pass
+    # record_metrics()
+    # data = msg['payload']
+    # agent_id = data.pop('agent_id')
+    # shared_metrics_dict[agent_id] = data
+    # log.info(f'Done dict: {shared_metrics_dict}')
 
-    for node in agents.values():
-        node.clear_messages_count()
+
+def current_datetime():
+    return datetime.datetime.now().strftime('%m-%d-%Y-%H-%M-%S')
 
 
 class MetricsTable:
-    cost = {}
-    message_count = {}
 
-    @classmethod
-    def update_metrics(cls):
+    def __init__(self):
+        self.cost = {}
+        self.message_count = {}
+        self.last_event = None
+        self.last_event_date_time = None
+
+    def update_metrics(self):
         messages_count = 0
         total_cost = 0
         for node in agents.values():
@@ -222,16 +263,17 @@ class MetricsTable:
                 messages_count += node.messages_count
                 total_cost += node.cost
 
-        cls.cost[last_event] = total_cost
-        cls.message_count[last_event] = messages_count
+        self.cost[self.last_event] = total_cost
+        self.message_count[self.last_event] = messages_count
 
-    @classmethod
-    def to_csv(cls, path):
+        save_simulation_metrics_handler()
+
+    def to_csv(self, path):
         df = pd.DataFrame({
-            'event': list(cls.cost.keys()),
-            'type': [evt.split(':')[0] for evt in cls.cost.keys()],
-            'cost': list(cls.cost.values()),
-            'message_count': list(cls.message_count.values()),
+            'event': list(self.cost.keys()),
+            'type': [evt.split(':')[0] for evt in self.cost.keys()],
+            'cost': list(self.cost.values()),
+            'message_count': list(self.message_count.values()),
         })
         df.to_csv(path, index=False)
 
@@ -245,4 +287,7 @@ directory = {
     messaging.SAVE_SIMULATION: save_simulation_handler,
     messaging.PLAY_SIMULATION: play_simulation_handler,
     messaging.SAVE_METRICS: save_simulation_metrics_handler,
+    messaging.DCOP_DONE: dcop_done_handler,
 }
+
+metrics = MetricsTable()

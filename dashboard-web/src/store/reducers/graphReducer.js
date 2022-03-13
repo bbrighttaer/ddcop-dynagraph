@@ -1,4 +1,4 @@
-import {ADD_EDGE, ADD_NODE, REMOVE_EDGE, REMOVE_NODE} from "../actionTypes";
+import {ADD_EDGE, ADD_NODE, CLEAR_GRAPH, REMOVE_EDGE, REMOVE_NODE} from "../actionTypes";
 
 const init_state = {
     nodes: [],
@@ -18,7 +18,7 @@ export function graphReducer(state = init_state, action) {
         case REMOVE_NODE:
             let nodes_arr = [];
             for (let i = 0; i < state.nodes.length; i++) {
-                if (state.nodes[i].id !== action.node.id){
+                if (state.nodes[i].id !== action.node.id) {
                     nodes_arr.push(state.nodes[i]);
                 }
             }
@@ -36,14 +36,19 @@ export function graphReducer(state = init_state, action) {
             return state;
         case REMOVE_EDGE:
             let edge_arr = [];
-            for (let i=0; i < state.edges.length; i++){
-                if (state.edges[i].id !== action.edge.id){
+            for (let i = 0; i < state.edges.length; i++) {
+                if (state.edges[i].id !== action.edge.id) {
                     edge_arr.push(state.edges[i]);
                 }
             }
             return {
                 ...state,
                 edges: edge_arr,
+            };
+        case CLEAR_GRAPH:
+            return {
+                nodes: [],
+                edges: [],
             };
         default:
             return state;

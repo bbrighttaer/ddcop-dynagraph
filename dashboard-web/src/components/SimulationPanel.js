@@ -20,15 +20,18 @@ import {useState} from "react";
 function SimulationPanel() {
     const dispatch = useDispatch();
 
+    const [numAgents, setNumAgents] = useState(1);
+    const handleNumAgentsChange = (e) => setNumAgents(e.target.value)
+
     const nodes = useSelector(state => state.graph.nodes);
     const edges = useSelector(state => state.graph.edges);
     const saved_simulations = useSelector(state => state.app.simulations);
 
     const [selectedSimulation, setSelectedSimulation] = useState('');
 
-    const handleAddAgent = () => dispatch(addAgent());
-    const handleRemoveAgent = () => dispatch(removeAgent());
-    const handleChangeConstraint = () => dispatch(changeConstraint());
+    const handleAddAgent = () => dispatch(addAgent(numAgents));
+    const handleRemoveAgent = () => dispatch(removeAgent(numAgents));
+    const handleChangeConstraint = () => dispatch(changeConstraint(numAgents));
     const handleSaveSimulation = () => dispatch(saveSimulation());
     const handleSavedSimulationChange = (e) => setSelectedSimulation(e.target.value);
     const handlePlaySimulation = () => dispatch(playSelectedSimulation(selectedSimulation));
@@ -36,14 +39,22 @@ function SimulationPanel() {
     return (
         <>
             <Controls>
-                <Button onClick={handleAddAgent}>
-                    <img src={addIcon} alt=""/>
-                    <span>Add Agent</span>
-                </Button>
+                <div>
+                    <Button onClick={handleAddAgent}>
+                        <img src={addIcon} alt=""/>
+                        <span>Add Agents</span>
+                    </Button>
+                    <label htmlFor="numAgentsSelect">Num. of agents: </label>
+                    <input type="Number" min="0"
+                           value={numAgents}
+                           onChange={handleNumAgentsChange}
+                           style={{width:'50px'}}
+                    />
+                </div>
 
                 <Button onClick={handleRemoveAgent}>
                     <img src={removeIcon} alt=""/>
-                    <span>Remove Agent</span>
+                    <span>Remove Agents</span>
                 </Button>
 
                 <Button onClick={handleChangeConstraint}>
@@ -127,7 +138,7 @@ const NorthPanel = styled.div`
 
     border: 1.5px solid #0400CF;
     box-sizing: border-box;
-    border-radius: 10px;
+    border-radius: 15px;
     min-width: 30%;
   }
 `;
@@ -172,4 +183,9 @@ const Graph = styled.div`
   border: 1px solid rgba(180, 180, 180, 0.8);
   border-radius: 1em;
   height: 80vh;
+`;
+
+const Select = styled.select`
+  border-radius: 15px;
+  min-width: 30%;
 `;

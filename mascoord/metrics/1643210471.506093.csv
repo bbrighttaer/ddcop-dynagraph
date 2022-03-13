@@ -1,4 +1,0 @@
-event,type,cost,message_count
-add_agent:0,add_agent,0.0,0
-add_agent:1,add_agent,14.884425839205738,14
-change_constraint:0-1:5-3-7,change_constraint,1.8828506029634055e-05,12
