@@ -13,6 +13,7 @@ import equations
 import logger
 import messaging
 from algorithms import graph
+from mascoord.equations import Quadratic
 from mascoord.utils import time_diff
 
 
@@ -51,17 +52,6 @@ def change_constraint_callback(dyna_graph, coefficients, neighbor_id):
 
 
 class Agent:
-    class State:
-        ANNOUNCING = 'announcing'
-        BROADCASTING = 'broadcasting'
-        IDLE = 'idle'
-
-        # agent states and their corresponding mutually exclusive in-coming message types
-        mutually_exclusive = {
-            IDLE: [],
-            ANNOUNCING: [messaging.ANNOUNCE_MSG],
-            BROADCASTING: [messaging.BROADCAST_MSG]
-        }
 
     def __init__(self, agent_id, dcop_algorithm, *args, **kwargs):
         # agent props
@@ -70,8 +60,7 @@ class Agent:
         self.terminate = False
         self.active_constraints = {}
         self.coefficients_dict = kwargs['coefficients_dict'] if 'coefficients_dict' in kwargs else {}
-        self.metrics_dict = kwargs['metrics_dict']
-        self.metrics_registry = kwargs['metrics_registry']
+        self.metrics = kwargs['metrics']
 
         self.is_client_asleep = False
 
@@ -128,7 +117,7 @@ class Agent:
         return self.dcop.cost
 
     def clear_cost(self):
-        self.dcop.cost = None
+        self.dcop.cost = 0
 
     @property
     def parent(self):
@@ -159,7 +148,7 @@ class Agent:
     def get_constraint(self, sender_id, coefficients: list = None):
         if not coefficients:
             coefficients = self.coefficients_dict.get(f'{self.agent_id},{sender_id}', [1, 1, 1])
-        equation_class = equations.equations_directory['linear']
+        equation_class = equations.equations_directory[Quadratic.name]
         constraint = equation_class(*coefficients)
         return constraint
 
@@ -174,6 +163,7 @@ class Agent:
 
     def shutdown(self):
         self.terminate = True
+        self.metrics.update_metrics()
 
     def send_report(self):
         try:
@@ -200,19 +190,19 @@ class Agent:
     def _time_lapse(self):
         self.accum_time = time_diff(self.start_time)
 
-    def dcop_done(self):
-        self.metrics_dict[self.agent_id] = {
-            'time': self.accum_time,
-            'cost': float(self.cost),
-            'num_messages': self.messages_count,
-        }
-        self.log.info('DCOP done')
-
-        # reset for next computation
-        self.clear_messages_count()
-        self.clear_cost()
-        self._start_time()
-        self.accum_time = 0
+    # def dcop_done(self):
+    #     self.metrics_dict[self.agent_id] = {
+    #         'time': self.accum_time,
+    #         'cost': float(self.cost),
+    #         'num_messages': self.messages_count,
+    #     }
+    #     self.log.info('DCOP done')
+    #
+    #     # reset for next computation
+    #     self.clear_messages_count()
+    #     self.clear_cost()
+    #     self._start_time()
+    #     self.accum_time = 0
 
     def agent_snapshot(self):
         snapshot = {
@@ -279,7 +269,7 @@ class Agent:
         # connection message handling
         if message_type == messaging.ANNOUNCE_MSG:
             self.graph.receive_announce_message(payload)
-            self.increment_messages_count()
+            # self.increment_messages_count()
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG:
             self.graph.receive_announce_response_message(payload)
@@ -318,9 +308,9 @@ class Agent:
             self.dcop.receive_inquiry_message(payload)
             self.increment_messages_count()
 
-        # elif message_type == messaging.COST_MESSAGE:
-        #     self.dcop.receive_cost_message(payload)
-        #     self.increment_messages_count()
+        elif message_type == messaging.COST_MESSAGE:
+            self.dcop.receive_cost_message(payload)
+            self.increment_messages_count()
 
         # SDPOP message handling
         elif message_type == messaging.VALUE_MESSAGE:
@@ -344,6 +334,7 @@ class Agent:
 
     def __call__(self, *args, **kwargs):
         self.log.info('Initializing...')
+        self.metrics.update_metrics()
 
         self.register_agent()
 
@@ -424,73 +415,3 @@ def create_metrics_on_message(metrics):
         metrics.record_agent_stats(body['payload'])
 
     return on_message
-
-
-class MetricsAgent:
-    log = logger.get_logger('metrics-agent')
-
-    def __init__(self):
-        self.agent_id = 'metrics-agent'
-        self.terminate = False
-
-        self.cost_per_agent = {}
-        self.num_msgs_per_agent = {}
-
-        self.costs_per_event = {}
-        self.num_mgs_per_event = {}
-
-        self.client = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL,
-                                                                        port=config.BROKER_PORT))
-        self.channel = self.client.channel()
-        self.queue = 'metrics-queue'
-        self.channel.queue_declare(self.queue, exclusive=True)
-        self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
-                                queue=self.queue,
-                                routing_key=f'{messaging.METRICS_CHANNEL}.#')
-        self.channel.basic_consume(queue=self.queue,
-                                   on_message_callback=create_metrics_on_message(self),
-                                   auto_ack=True)
-
-    def record_agent_stats(self, payload):
-        agent = payload['agent_id']
-        self.cost_per_agent[agent] = payload['cost']
-        self.num_msgs_per_agent[agent] = payload['num_messages']
-
-    def set_event(self, event):
-        self.log.info(event)
-        self.record_metrics(event)
-        self.cost_per_agent.clear()
-        self.num_msgs_per_agent.clear()
-
-    def __call__(self, *args, **kwargs):
-        log = MetricsAgent.log
-        log.info('Metrics collection started')
-
-        while not self.terminate:
-            self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
-
-        log.info('Metrics collection stopped')
-        self.release_resources()
-
-    def release_resources(self):
-        self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
-                                  queue=self.queue,
-                                  routing_key=f'{messaging.METRICS_CHANNEL}.#')
-
-    def record_metrics(self, event):
-        messages_count = 0
-        total_cost = 0
-        for cost, num_msgs in zip(self.cost_per_agent.values(), self.num_msgs_per_agent.values()):
-            total_cost += cost
-            messages_count += num_msgs
-        self.costs_per_event[event] = total_cost
-        self.num_mgs_per_event[event] = messages_count
-
-    def to_csv(self, path):
-        df = pd.DataFrame({
-            'event': list(self.costs_per_event.keys()),
-            'type': [evt.split(':')[0] for evt in self.costs_per_event.keys()],
-            'cost': list(self.costs_per_event.values()),
-            'message_count': list(self.num_mgs_per_event.values()),
-        })
-        df.to_csv(path, index=False)

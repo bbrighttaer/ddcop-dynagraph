@@ -6,7 +6,6 @@ import time
 import pika
 
 import config
-import handlers
 import logger
 import messaging
 import random
@@ -22,6 +21,7 @@ start_time = time.time()
 
 def on_message(ch, method, properties, body):
     msg = eval(body.decode('utf-8'))
+    from mascoord import handlers
     func = handlers.directory.get(msg['type'], None)
 
     if func:
@@ -53,6 +53,7 @@ if __name__ == '__main__':
     )
 
     args = parser.parse_args()
+    from mascoord import handlers
     handlers.set_dcop_algorithm(args.alg)
     handlers.set_domain_size(args.domain_size)
 
