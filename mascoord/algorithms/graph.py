@@ -46,13 +46,14 @@ class DynaGraph:
             neighbors.append(self.parent)
         return neighbors
 
-    def on_network_changed(self):
+    def on_network_changed(self, thread_id=None):
         for child in self.children:
             self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                        routing_key=f'{messaging.AGENTS_CHANNEL}.{child}',
                                        body=messaging.create_set_network_message({
                                            'agent_id': self.agent.agent_id,
                                            'network': self.network,
+                                           'thread_id': thread_id or self.agent.agent_id,
                                        }))
         self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                    routing_key=f'{messaging.MONITORING_CHANNEL}',
@@ -265,16 +266,48 @@ class DynaGraph:
     def receive_set_network_message(self, payload):
         data = payload['payload']
         network = data['network']
-        self.network = network
-        self.on_network_changed()
+        sender = data['agent_id']
+        thread_id = data['thread_id']
 
-        if not self.children:
+        if thread_id == self.agent.agent_id:
+            self.log.info(f'Disconnecting from agent {sender}')
+            self.disconnect_neighbor(sender)
+
+            # send a disconnection message to sender
             self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.public',
-                                       body=messaging.create_network_update_completion({
+                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
+                                       body=messaging.create_disconnection_message({
                                            'agent_id': self.agent.agent_id,
-                                           'network': self.network,
                                        }))
+        else:
+            self.network = network
+            self.on_network_changed(thread_id)
+
+            if not self.children:
+                self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                           routing_key=f'{messaging.AGENTS_CHANNEL}.public',
+                                           body=messaging.create_network_update_completion({
+                                               'agent_id': self.agent.agent_id,
+                                               'network': self.network,
+                                           }))
+
+    def receive_disconnection_message(self, payload):
+        self.log.info(f'Received disconnection message {payload}')
+        sender = payload['payload']
+        self.disconnect_neighbor(sender)
+
+    def disconnect_neighbor(self, sender):
+        # remove sender from connections
+        if self.parent == sender:
+            self.busy = True
+            self.parent = None
+        elif sender in self.children:
+            self.children.remove(sender)
+
+        if sender in self.neighbors:
+            self.agent.active_constraints.pop(f'{self.agent.agent_id},{sender}')
+            self.agent.agent_disconnection_callback(sender)
+            self.report_agent_disconnection(sender)
 
     def ping_neighbors(self):
         for agent in self.neighbors:
@@ -354,3 +387,5 @@ class DynaGraph:
             self.reset()
         elif self.agent.graph_traversing_order == 'bottom-up' and self.is_parent(neighbor_id):  # then it is a leaf node
             self.reset()
+
+        self.agent.metrics.update_metrics()
