@@ -4,7 +4,6 @@ import numpy as np
 
 from mascoord import config
 from mascoord import messaging
-from mascoord.handlers import MetricsTable
 
 
 class DCOP:

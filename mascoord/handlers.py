@@ -11,6 +11,7 @@ import config
 import logger
 import messaging
 import utils
+from mascoord.algorithms.dcop import DCOP
 
 agents = {}
 agent_id_to_thread = {}
@@ -53,7 +54,7 @@ def set_dcop_algorithm(alg):
     dcop_algorithm = {
         'c-cocoa': CCoCoA,
         'sdpop': SDPOP,
-    }.get(alg)
+    }.get(alg, DCOP)
 
 
 def set_domain_size(size):
