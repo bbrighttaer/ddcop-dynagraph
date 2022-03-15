@@ -18,6 +18,9 @@ class DCOP:
         self.agent = agent
         self.graph = self.agent.graph
         self.domain = random.sample(range(domain_lb, domain_ub), num_discrete_points)
+        # self.domain = [-10.0, 5.0, 12.0] # random.sample(range(domain_lb, domain_ub), num_discrete_points)
+        # self.domain = [-43, 21, 49, 8, 19, -24, 24, -2, -32, 33, -42, -3, 10, -31, -40, -16, 40, 25, 4, -8, -38,
+        #                -21, -33, 34, 46, -5, 13, 45, -39, -49, -12, -35, -44, 2, -30, -9, 1, -15, -25, 16]
         self.domain_lb = domain_lb
         self.domain_ub = domain_ub
         self.state = None
