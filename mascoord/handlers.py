@@ -11,7 +11,7 @@ import config
 import logger
 import messaging
 import utils
-from mascoord.algorithms.dcop import DCOP
+from mascoord.algorithms.dcop import DCOP, CSDPOP
 
 agents = {}
 agent_id_to_thread = {}
@@ -54,6 +54,7 @@ def set_dcop_algorithm(alg):
     dcop_algorithm = {
         'c-cocoa': CCoCoA,
         'sdpop': SDPOP,
+        'c-sdpop': CSDPOP,
     }.get(alg, DCOP)
 
 
