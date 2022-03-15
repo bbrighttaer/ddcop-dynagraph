@@ -40,7 +40,7 @@ if __name__ == '__main__':
         '--algorithm',
         dest='alg',
         type=str,
-        choices=['c-cocoa', 'sdpop', 'no-dcop'],
+        choices=['c-cocoa', 'sdpop', 'c-sdpop', 'no-dcop'],
         required=True,
         help='The DCOP algorithm to be used with the Dynamic Graph algorithm',
     )

@@ -11,7 +11,7 @@ import config
 import logger
 import messaging
 import utils
-from mascoord.algorithms.dcop import DCOP
+from mascoord.algorithms.dcop import DCOP, CSDPOP
 
 agents = {}
 agent_id_to_thread = {}
@@ -54,6 +54,7 @@ def set_dcop_algorithm(alg):
     dcop_algorithm = {
         'c-cocoa': CCoCoA,
         'sdpop': SDPOP,
+        'c-sdpop': CSDPOP,
     }.get(alg, DCOP)
 
 
@@ -253,19 +254,56 @@ class MetricsTable:
     def __init__(self):
         self.cost = {}
         self.message_count = {}
+
+        self.announce_msg_count = {}
+        self.announce_res_msg_count = {}
+        self.announce_resp_msg_ack_count = {}
+        self.set_network_count = {}
+        self.ping_msg_count = {}
+        self.ping_msg_resp_count = {}
+        self.network_update_comp_count = {}
+        self.constraint_changed_count = {}
+
         self.last_event = None
         self.last_event_date_time = None
 
     def update_metrics(self):
         messages_count = 0
         total_cost = 0
+        announce_msg_count = 0
+        announce_res_msg_count = 0
+        announce_resp_msg_ack_count = 0
+        set_network_count = 0
+        ping_msg_count = 0
+        ping_msg_resp_count = 0
+        network_update_comp_count = 0
+        constraint_changed_count = 0
+
         for node in agents.values():
             if not node.terminate:
                 messages_count += node.messages_count
                 total_cost += node.cost
 
+                announce_msg_count += node.announce_msg_count
+                announce_res_msg_count += node.announce_res_msg_count
+                announce_resp_msg_ack_count += node.announce_resp_msg_ack_count
+                set_network_count += node.set_network_count
+                ping_msg_count += node.ping_msg_count
+                ping_msg_resp_count += node.ping_msg_resp_count
+                network_update_comp_count += node.network_update_comp_count
+                constraint_changed_count += node.constraint_changed_count
+
         self.cost[self.last_event] = total_cost
         self.message_count[self.last_event] = messages_count
+
+        self.announce_msg_count[self.last_event] = announce_msg_count
+        self.announce_res_msg_count[self.last_event] = announce_res_msg_count
+        self.announce_resp_msg_ack_count[self.last_event] = announce_resp_msg_ack_count
+        self.set_network_count[self.last_event] = set_network_count
+        self.ping_msg_count[self.last_event] = ping_msg_count
+        self.ping_msg_resp_count[self.last_event] = ping_msg_resp_count
+        self.network_update_comp_count[self.last_event] = network_update_comp_count
+        self.constraint_changed_count[self.last_event] = constraint_changed_count
 
         save_simulation_metrics_handler()
 
@@ -275,6 +313,16 @@ class MetricsTable:
             'type': [evt.split(':')[0] for evt in self.cost.keys()],
             'cost': list(self.cost.values()),
             'message_count': list(self.message_count.values()),
+
+            # dynamic graph stats
+            'announce_msg_count': list(self.announce_msg_count.values()),
+            'announce_res_msg_count': list(self.announce_res_msg_count.values()),
+            'announce_resp_msg_ack_count': list(self.announce_resp_msg_ack_count.values()),
+            'set_network_count': list(self.set_network_count.values()),
+            'ping_msg_count': list(self.ping_msg_count.values()),
+            'ping_msg_resp_count': list(self.ping_msg_resp_count.values()),
+            'network_update_comp_count': list(self.network_update_comp_count.values()),
+            'constraint_changed_count': list(self.constraint_changed_count.values()),
         })
         df.to_csv(path, index=False)
 

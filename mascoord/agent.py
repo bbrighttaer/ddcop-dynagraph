@@ -68,6 +68,16 @@ class Agent:
         self.start_time = time.time()
         self.accum_time = 0
 
+        # dynamic graph stats
+        self.announce_msg_count = 0
+        self.announce_res_msg_count = 0
+        self.announce_resp_msg_ack_count = 0
+        self.set_network_count = 0
+        self.ping_msg_count = 0
+        self.ping_msg_resp_count = 0
+        self.network_update_comp_count = 0
+        self.constraint_changed_count = 0
+
         self.client = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL,
                                                                         port=config.BROKER_PORT))
         self.channel = self.client.channel()
@@ -270,34 +280,42 @@ class Agent:
         if message_type == messaging.ANNOUNCE_MSG:
             self.graph.receive_announce_message(payload)
             # self.increment_messages_count()
+            self.announce_msg_count += 1
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG:
             self.graph.receive_announce_response_message(payload)
             self.increment_messages_count()
+            self.announce_res_msg_count += 1
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG_ACK:
             self.graph.receive_announce_response_message_ack(payload)
             self.increment_messages_count()
+            self.announce_resp_msg_ack_count += 1
 
         elif message_type == messaging.SET_NETWORK:
             self.graph.receive_set_network_message(payload)
             self.increment_messages_count()
+            self.set_network_count += 1
 
         elif message_type == messaging.PING_MESSAGE:
             self.graph.receive_ping_message(payload)
             self.increment_messages_count()
+            self.ping_msg_count += 1
 
         elif message_type == messaging.PING_RESPONSE_MESSAGE:
             self.graph.receive_ping_response_message(payload)
             self.increment_messages_count()
+            self.ping_msg_resp_count += 1
 
         elif message_type == messaging.NETWORK_UPDATE_COMPLETION:
             self.graph.receive_network_update_completion_message(payload)
             self.increment_messages_count()
+            self.network_update_comp_count += 1
 
         elif message_type == messaging.CONSTRAINT_CHANGED:
             self.graph.receive_constraint_changed_message(payload)
             self.increment_messages_count()
+            self.constraint_changed_count += 1
 
         # C-CoCoA message handling
         elif message_type == messaging.UPDATE_STATE_MESSAGE:
