@@ -476,7 +476,7 @@ class CSDPOP(SDPOP):
     def __init__(self, *args, **kwargs):
         super(CSDPOP, self).__init__(*args, **kwargs)
         self.max_iter = 100
-        self.alpha = 0.1
+        self.alpha = 0.05
 
     def _compute_util_and_value(self):
         # children
