@@ -230,7 +230,7 @@ def play_simulation_handler(msg):
 
 def save_simulation_metrics_handler(msg=None):
     os.makedirs('metrics', exist_ok=True)
-    label = f'{dcop_algorithm.name}-d{domain_size}-l{config.LEARNING_RATE}'
+    label = f'{dcop_algorithm.name}-d{domain_size}Lr{config.LEARNING_RATE}'
     metrics_file = os.path.join('metrics/', f'{label}.csv')
     metrics.to_csv(metrics_file)
     log.info(f'Metrics saved at {metrics_file}')
@@ -275,6 +275,7 @@ class MetricsTable:
         messages_count = 0
         total_cost = 0
         num_changes = 0
+        num_active_agents = 0
         announce_msg_count = 0
         announce_res_msg_count = 0
         announce_resp_msg_ack_count = 0
@@ -286,6 +287,7 @@ class MetricsTable:
 
         for node in agents.values():
             if not node.terminate:
+                num_active_agents += 1
                 messages_count += node.messages_count
                 total_cost += node.cost
                 num_changes += node.value_changes_count
@@ -305,7 +307,7 @@ class MetricsTable:
         self.edge_cost_per_event[self.last_event] = sum(self.edge_cost_per_agent.values())
         self.message_count[self.last_event] = messages_count
         self.num_changes_per_event[self.last_event] = num_changes
-        self.num_agents_per_event[self.last_event] = len(agents)
+        self.num_agents_per_event[self.last_event] = num_active_agents
 
         self.announce_msg_count[self.last_event] = announce_msg_count
         self.announce_res_msg_count[self.last_event] = announce_res_msg_count

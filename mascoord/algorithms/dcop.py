@@ -444,6 +444,7 @@ class SDPOP(DCOP):
             x_i = self.X_ij[:, j].reshape(-1, )
             self.cost = float(x_i.min())
             self.value = self.domain[int(x_i.argmin())]
+            self.agent.value_changes_count += 1
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
             self.log.info(f'Cost is {self.cost}')
