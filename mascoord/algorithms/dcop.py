@@ -27,6 +27,7 @@ class DCOP:
         self.value = None
         self.cpa = {}
         self.cost = 0
+        self.params = None
 
     def calculate_and_report_cost(self, best_params):
         """
@@ -40,6 +41,17 @@ class DCOP:
         self.log.info(f'Cost is {self.cost}')
 
         self.collect_metrics()
+
+    def set_edge_costs(self):
+        try:
+            if self.params:
+                for neighbor in self.graph.neighbors:
+                    constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
+                    n_value = self.params[neighbor]
+                    cost = constraint.equation.evaluate({'x': self.value, 'y': n_value})
+                    self.agent.metrics.update_edge_cost(self.agent.agent_id, neighbor, cost)
+        except:
+            pass
 
     def collect_metrics(self):
         self.log.info('DCOP done')
@@ -122,7 +134,7 @@ class CCoCoA(DCOP):
     def __init__(self, *args, **kwargs):
         super(CCoCoA, self).__init__(*args, **kwargs)
         self.state = self.IDLE
-        self.alpha = 0.01
+        self.alpha = config.LEARNING_RATE
         self.max_iter = 100
         self.neighbor_states = {}
         self.cost_map = {}
@@ -191,6 +203,7 @@ class CCoCoA(DCOP):
             self.value = min(max(self.domain_lb, self.value), self.domain_ub)
 
         # update agent
+        self.agent.value_changes_count += 1
         self.cpa[f'agent-{self.agent.agent_id}'] = self.value
         self.state = self.DONE
         self.report_state_change_to_dashboard()
@@ -204,7 +217,7 @@ class CCoCoA(DCOP):
             })
 
         self.cost_map.clear()
-
+        self.params = best_params
         self.calculate_and_report_cost(best_params)
 
     def can_resolve_agent_value(self) -> bool:
@@ -365,6 +378,7 @@ class SDPOP(DCOP):
 
             self.cost = float(np.min(x_i))
             self.value = self.domain[int(np.argmin(x_i))]
+            self.agent.value_changes_count += 1
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
             self.log.info(f'Cost is {self.cost}')
@@ -430,6 +444,7 @@ class SDPOP(DCOP):
             x_i = self.X_ij[:, j].reshape(-1, )
             self.cost = float(x_i.min())
             self.value = self.domain[int(x_i.argmin())]
+            self.agent.value_changes_count += 1
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
             self.log.info(f'Cost is {self.cost}')
@@ -476,7 +491,7 @@ class CSDPOP(SDPOP):
     def __init__(self, *args, **kwargs):
         super(CSDPOP, self).__init__(*args, **kwargs)
         self.max_iter = 100
-        self.alpha = 0.05
+        self.alpha = config.LEARNING_RATE
 
     def _compute_util_and_value(self):
         # children
@@ -580,5 +595,7 @@ class CSDPOP(SDPOP):
                     agent_values[neighbor] = min(max(self.domain_lb, n_value), self.domain_ub)
 
             self.value = self.value - self.alpha * grad_sum
-
+            self.value = min(max(self.domain_lb, self.value), self.domain_ub)
+        self.agent.value_changes_count += 1
+        self.params = agent_values
         self.calculate_and_report_cost(agent_values)

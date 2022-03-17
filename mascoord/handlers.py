@@ -230,7 +230,7 @@ def play_simulation_handler(msg):
 
 def save_simulation_metrics_handler(msg=None):
     os.makedirs('metrics', exist_ok=True)
-    label = f'{dcop_algorithm.name}-d{domain_size}'
+    label = f'{dcop_algorithm.name}-d{domain_size}Lr{config.LEARNING_RATE}'
     metrics_file = os.path.join('metrics/', f'{label}.csv')
     metrics.to_csv(metrics_file)
     log.info(f'Metrics saved at {metrics_file}')
@@ -253,7 +253,11 @@ class MetricsTable:
 
     def __init__(self):
         self.cost = {}
+        self.edge_cost_per_event = {}
+        self.edge_cost_per_agent = {}
         self.message_count = {}
+        self.num_changes_per_event = {}
+        self.num_agents_per_event = {}
 
         self.announce_msg_count = {}
         self.announce_res_msg_count = {}
@@ -270,6 +274,8 @@ class MetricsTable:
     def update_metrics(self):
         messages_count = 0
         total_cost = 0
+        num_changes = 0
+        num_active_agents = 0
         announce_msg_count = 0
         announce_res_msg_count = 0
         announce_resp_msg_ack_count = 0
@@ -281,8 +287,10 @@ class MetricsTable:
 
         for node in agents.values():
             if not node.terminate:
+                num_active_agents += 1
                 messages_count += node.messages_count
                 total_cost += node.cost
+                num_changes += node.value_changes_count
 
                 announce_msg_count += node.announce_msg_count
                 announce_res_msg_count += node.announce_res_msg_count
@@ -293,8 +301,13 @@ class MetricsTable:
                 network_update_comp_count += node.network_update_comp_count
                 constraint_changed_count += node.constraint_changed_count
 
+                node.set_edge_costs()
+
         self.cost[self.last_event] = total_cost
+        self.edge_cost_per_event[self.last_event] = sum(self.edge_cost_per_agent.values())
         self.message_count[self.last_event] = messages_count
+        self.num_changes_per_event[self.last_event] = num_changes
+        self.num_agents_per_event[self.last_event] = num_active_agents
 
         self.announce_msg_count[self.last_event] = announce_msg_count
         self.announce_res_msg_count[self.last_event] = announce_res_msg_count
@@ -307,12 +320,23 @@ class MetricsTable:
 
         save_simulation_metrics_handler()
 
+    def update_edge_cost(self, agent1, agent2, cost):
+        k1 = agent1
+        k2 = agent2
+        if agent2 < k1:
+            k1 = agent2
+            k2 = agent1
+        self.edge_cost_per_agent[f'{k1}-{k2}'] = cost
+
     def to_csv(self, path):
         df = pd.DataFrame({
             'event': list(self.cost.keys()),
             'type': [evt.split(':')[0] for evt in self.cost.keys()],
-            'cost': list(self.cost.values()),
+            'num_agents': list(self.num_agents_per_event.values()),
+            'node_cost': list(self.cost.values()),
+            'edge_cost': list(self.edge_cost_per_event.values()),
             'message_count': list(self.message_count.values()),
+            'num_changes': list(self.num_changes_per_event.values()),
 
             # dynamic graph stats
             'announce_msg_count': list(self.announce_msg_count.values()),
