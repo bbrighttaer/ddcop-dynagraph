@@ -253,6 +253,8 @@ class MetricsTable:
 
     def __init__(self):
         self.cost = {}
+        self.edge_cost_per_event = {}
+        self.edge_cost_per_agent = {}
         self.message_count = {}
 
         self.announce_msg_count = {}
@@ -293,7 +295,10 @@ class MetricsTable:
                 network_update_comp_count += node.network_update_comp_count
                 constraint_changed_count += node.constraint_changed_count
 
+                node.set_edge_costs()
+
         self.cost[self.last_event] = total_cost
+        self.edge_cost_per_event[self.last_event] = sum(self.edge_cost_per_agent.values())
         self.message_count[self.last_event] = messages_count
 
         self.announce_msg_count[self.last_event] = announce_msg_count
@@ -307,11 +312,20 @@ class MetricsTable:
 
         save_simulation_metrics_handler()
 
+    def update_edge_cost(self, agent1, agent2, cost):
+        k1 = agent1
+        k2 = agent2
+        if agent2 < k1:
+            k1 = agent2
+            k2 = agent1
+        self.edge_cost_per_agent[f'{k1}-{k2}'] = cost
+
     def to_csv(self, path):
         df = pd.DataFrame({
             'event': list(self.cost.keys()),
             'type': [evt.split(':')[0] for evt in self.cost.keys()],
-            'cost': list(self.cost.values()),
+            'node_cost': list(self.cost.values()),
+            'edge_cost': list(self.edge_cost_per_event.values()),
             'message_count': list(self.message_count.values()),
 
             # dynamic graph stats

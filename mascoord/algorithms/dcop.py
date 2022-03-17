@@ -27,6 +27,7 @@ class DCOP:
         self.value = None
         self.cpa = {}
         self.cost = 0
+        self.params = None
 
     def calculate_and_report_cost(self, best_params):
         """
@@ -40,6 +41,17 @@ class DCOP:
         self.log.info(f'Cost is {self.cost}')
 
         self.collect_metrics()
+
+    def set_edge_costs(self):
+        try:
+            if self.params:
+                for neighbor in self.graph.neighbors:
+                    constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
+                    n_value = self.params[neighbor]
+                    cost = constraint.equation.evaluate({'x': self.value, 'y': n_value})
+                    self.agent.metrics.update_edge_cost(self.agent.agent_id, neighbor, cost)
+        except:
+            pass
 
     def collect_metrics(self):
         self.log.info('DCOP done')
@@ -204,7 +216,7 @@ class CCoCoA(DCOP):
             })
 
         self.cost_map.clear()
-
+        self.params = best_params
         self.calculate_and_report_cost(best_params)
 
     def can_resolve_agent_value(self) -> bool:
@@ -580,5 +592,5 @@ class CSDPOP(SDPOP):
                     agent_values[neighbor] = min(max(self.domain_lb, n_value), self.domain_ub)
 
             self.value = self.value - self.alpha * grad_sum
-
+        self.params = agent_values
         self.calculate_and_report_cost(agent_values)

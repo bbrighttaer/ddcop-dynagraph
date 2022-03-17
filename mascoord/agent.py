@@ -273,6 +273,9 @@ class Agent:
         neighbor_id = selected.split(',')[1]
         return neighbor_id
 
+    def set_edge_costs(self):
+        self.dcop.set_edge_costs()
+
     def handle_message(self, payload):
         message_type = payload['type']
 
@@ -299,12 +302,12 @@ class Agent:
 
         elif message_type == messaging.PING_MESSAGE:
             self.graph.receive_ping_message(payload)
-            self.increment_messages_count()
+            # self.increment_messages_count()
             self.ping_msg_count += 1
 
         elif message_type == messaging.PING_RESPONSE_MESSAGE:
             self.graph.receive_ping_response_message(payload)
-            self.increment_messages_count()
+            # self.increment_messages_count()
             self.ping_msg_resp_count += 1
 
         elif message_type == messaging.NETWORK_UPDATE_COMPLETION:
