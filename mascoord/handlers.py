@@ -350,6 +350,12 @@ class MetricsTable:
         })
         df.to_csv(path, index=False)
 
+    def get_agent_value(self, agent_id):
+        if agent_id in agents:
+            return agents[agent_id].value
+        else:
+            return None
+
 
 directory = {
     messaging.TEST: test_msg_handler,
