@@ -134,7 +134,7 @@ class CCoCoA(DCOP):
     def __init__(self, *args, **kwargs):
         super(CCoCoA, self).__init__(*args, **kwargs)
         self.state = self.IDLE
-        self.alpha = 0.01
+        self.alpha = config.LEARNING_RATE
         self.max_iter = 100
         self.neighbor_states = {}
         self.cost_map = {}
@@ -203,6 +203,7 @@ class CCoCoA(DCOP):
             self.value = min(max(self.domain_lb, self.value), self.domain_ub)
 
         # update agent
+        self.agent.value_changes_count += 1
         self.cpa[f'agent-{self.agent.agent_id}'] = self.value
         self.state = self.DONE
         self.report_state_change_to_dashboard()
@@ -377,6 +378,7 @@ class SDPOP(DCOP):
 
             self.cost = float(np.min(x_i))
             self.value = self.domain[int(np.argmin(x_i))]
+            self.agent.value_changes_count += 1
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
             self.log.info(f'Cost is {self.cost}')
@@ -488,7 +490,7 @@ class CSDPOP(SDPOP):
     def __init__(self, *args, **kwargs):
         super(CSDPOP, self).__init__(*args, **kwargs)
         self.max_iter = 100
-        self.alpha = 0.05
+        self.alpha = config.LEARNING_RATE
 
     def _compute_util_and_value(self):
         # children
@@ -592,5 +594,7 @@ class CSDPOP(SDPOP):
                     agent_values[neighbor] = min(max(self.domain_lb, n_value), self.domain_ub)
 
             self.value = self.value - self.alpha * grad_sum
+            self.value = min(max(self.domain_lb, self.value), self.domain_ub)
+        self.agent.value_changes_count += 1
         self.params = agent_values
         self.calculate_and_report_cost(agent_values)

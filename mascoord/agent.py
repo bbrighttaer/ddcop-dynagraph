@@ -65,6 +65,7 @@ class Agent:
         self.is_client_asleep = False
 
         self.messages_count = 0
+        self.value_changes_count = 0
         self.start_time = time.time()
         self.accum_time = 0
 

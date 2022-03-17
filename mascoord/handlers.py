@@ -256,6 +256,8 @@ class MetricsTable:
         self.edge_cost_per_event = {}
         self.edge_cost_per_agent = {}
         self.message_count = {}
+        self.num_changes_per_event = {}
+        self.num_agents_per_event = {}
 
         self.announce_msg_count = {}
         self.announce_res_msg_count = {}
@@ -272,6 +274,7 @@ class MetricsTable:
     def update_metrics(self):
         messages_count = 0
         total_cost = 0
+        num_changes = 0
         announce_msg_count = 0
         announce_res_msg_count = 0
         announce_resp_msg_ack_count = 0
@@ -285,6 +288,7 @@ class MetricsTable:
             if not node.terminate:
                 messages_count += node.messages_count
                 total_cost += node.cost
+                num_changes += node.value_changes_count
 
                 announce_msg_count += node.announce_msg_count
                 announce_res_msg_count += node.announce_res_msg_count
@@ -300,6 +304,8 @@ class MetricsTable:
         self.cost[self.last_event] = total_cost
         self.edge_cost_per_event[self.last_event] = sum(self.edge_cost_per_agent.values())
         self.message_count[self.last_event] = messages_count
+        self.num_changes_per_event[self.last_event] = num_changes
+        self.num_agents_per_event = len(agents)
 
         self.announce_msg_count[self.last_event] = announce_msg_count
         self.announce_res_msg_count[self.last_event] = announce_res_msg_count
@@ -324,9 +330,11 @@ class MetricsTable:
         df = pd.DataFrame({
             'event': list(self.cost.keys()),
             'type': [evt.split(':')[0] for evt in self.cost.keys()],
+            'num_agents': list(self.num_agents_per_event.values()),
             'node_cost': list(self.cost.values()),
             'edge_cost': list(self.edge_cost_per_event.values()),
             'message_count': list(self.message_count.values()),
+            'num_changes': list(self.num_changes_per_event.values()),
 
             # dynamic graph stats
             'announce_msg_count': list(self.announce_msg_count.values()),
