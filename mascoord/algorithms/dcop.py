@@ -27,7 +27,7 @@ class DCOP:
         self.value = None
         self.cpa = {}
         self.cost = 0
-        self.params = None
+        self.params = {}
 
     def calculate_and_report_cost(self, best_params):
         """
@@ -48,8 +48,9 @@ class DCOP:
                 for neighbor in self.graph.neighbors:
                     constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
                     n_value = self.params[neighbor]
-                    cost = constraint.equation.evaluate({'x': self.value, 'y': n_value})
-                    self.agent.metrics.update_edge_cost(self.agent.agent_id, neighbor, cost)
+                    if n_value:
+                        cost = constraint.equation.evaluate({'x': self.value, 'y': n_value})
+                        self.agent.metrics.update_edge_cost(self.agent.agent_id, neighbor, cost)
         except:
             pass
 
@@ -336,6 +337,14 @@ class SDPOP(DCOP):
         self.util_messages = {}
         self.X_ij = None
         self.util_received = False
+
+    def set_edge_costs(self):
+        """
+        Trick to get values of neighbors in before setting edge costs
+        """
+        for agent in self.graph.neighbors:
+            self.params[agent] = self.agent.metrics.get_agent_value(agent)
+        super(SDPOP, self).set_edge_costs()
 
     def connection_extra_args(self) -> dict:
         return {
