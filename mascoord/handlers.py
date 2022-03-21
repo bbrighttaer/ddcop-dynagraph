@@ -14,6 +14,7 @@ import utils
 from mascoord.algorithms.dcop import DCOP, CSDPOP
 
 agents = {}
+terminated_agents = []
 agent_id_to_thread = {}
 
 log = logger.get_logger('factory-handler')
@@ -26,13 +27,45 @@ CHANGE_CONSTRAINT = 'change_constraint'
 last_event = None
 last_event_date_time = None
 dcop_algorithm = None
-metrics_agent = None
 
 costs_per_event = {}
 num_mgs_per_event = {}
 time_per_event = {}
 
 domain_size = 2
+
+metrics_file_prefix = None
+
+
+def reset_buffers():
+    log.info('----------------- Resetting handler buffers ----------------------')
+
+    global last_event
+    global last_event_date_time
+    global metrics
+
+    last_event = None
+    last_event_date_time = None
+
+    for agent_id in agents:
+        node = agents[agent_id]
+        if not node.terminate:
+            node.shutdown()
+        agent_id_to_thread[agent_id].join()
+
+    agents.clear()
+    terminated_agents.clear()
+    agent_id_to_thread.clear()
+
+    costs_per_event.clear()
+    num_mgs_per_event.clear()
+    time_per_event.clear()
+
+    commands.clear()
+
+    metrics = MetricsTable()
+
+    log.info('----------------- Reset complete ----------------------')
 
 
 def create_and_start_agent(agent_id):
@@ -105,7 +138,7 @@ def add_agent_handler(msg):
 
 def _spawn_agent(agent_id):
     t = threading.Thread(target=create_and_start_agent, args=(str(agent_id),))
-    agent_id_to_thread[agent_id] = t
+    agent_id_to_thread[str(agent_id)] = t
     t.start()
 
 
@@ -137,6 +170,7 @@ def remove_agent_handler(msg):
                 metrics.last_event_date_time = datetime.datetime.now()
 
                 selected_agent.shutdown()
+                terminated_agents.append(selected_agent)
 
                 time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
 
@@ -198,7 +232,9 @@ def save_simulation_handler(msg):
     lines.append(f'cons={">".join(cons)}\n')
     lines.append(f'domains={" ".join(domains)}\n')
 
-    sim_file = os.path.join(base_path, f'{label}.sim')
+    prefix = msg['prefix'] if 'prefix' in msg else ''
+    suffix = msg['suffix'] if 'suffix' in msg else ''
+    sim_file = os.path.join(base_path, f'{prefix}{label}{suffix}.sim')
     with open(sim_file, 'w') as file:
         file.writelines(lines)
 
@@ -228,9 +264,15 @@ def play_simulation_handler(msg):
     log.info('End of simulation')
 
 
+def set_metrics_file_prefix(val):
+    global metrics_file_prefix
+    metrics_file_prefix = val
+
+
 def save_simulation_metrics_handler(msg=None):
+    prefix = metrics_file_prefix if metrics_file_prefix else ''
     os.makedirs('metrics', exist_ok=True)
-    label = f'{dcop_algorithm.name}-d{domain_size}Lr{config.LEARNING_RATE}'
+    label = f'{prefix}{dcop_algorithm.name}-d{domain_size}Lr{config.LEARNING_RATE}'
     metrics_file = os.path.join('metrics/', f'{label}.csv')
     metrics.to_csv(metrics_file)
     log.info(f'Metrics saved at {metrics_file}')

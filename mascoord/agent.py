@@ -79,12 +79,16 @@ class Agent:
         self.network_update_comp_count = 0
         self.constraint_changed_count = 0
 
-        self.client = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL,
-                                                                        port=config.BROKER_PORT))
+        self.client = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=config.BROKER_URL,
+                port=config.BROKER_PORT,
+                credentials=pika.credentials.PlainCredentials(config.PIKA_USERNAME, config.PIKA_PASSWORD)
+            ))
         self.channel = self.client.channel()
         # self.client.add_callback_threadsafe(callback=self.start)
         self.queue = f'queue-{self.agent_id}'
-        self.channel.queue_declare(self.queue, exclusive=True)
+        self.channel.queue_declare(self.queue, exclusive=False)
 
         self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
                                 queue=self.queue,
@@ -408,6 +412,8 @@ class Agent:
                                   queue=self.queue,
                                   routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#')
         self.channel.queue_delete(self.queue)
+        self.channel.close()
+        self.client.close()
 
     def register_agent(self):
         # register with dashboard

@@ -82,7 +82,7 @@ class DCOP:
         """
         Provides any custom arguments to be sent when the agent connects to another agent
         """
-        return {}
+        return {'alg': self.name}
 
     def receive_extra_args(self, sender, args):
         """
@@ -349,6 +349,7 @@ class SDPOP(DCOP):
     def connection_extra_args(self) -> dict:
         return {
             'domain': self.domain,
+            'alg': self.name,
         }
 
     def receive_extra_args(self, sender, args):

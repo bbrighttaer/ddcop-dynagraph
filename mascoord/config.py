@@ -4,7 +4,8 @@ import dotenv
 
 dotenv.load_dotenv()
 
-USE_PREDEFINED_NETWORK = True
+USE_PREDEFINED_NETWORK = False
+MAX_OUT_DEGREE = float('inf')
 
 DOMAIN = os.environ['DOMAIN']
 BROKER_URL = os.environ['BROKER_URL']
@@ -16,3 +17,13 @@ PING_PROC_CALL_DELAY_IN_SECONDS = int(os.environ['PING_PROC_CALL_DELAY_IN_SECOND
 MAX_PING_COUNT = int(os.environ['MAX_PING_COUNT'])
 PIKA_USERNAME = os.environ['PIKA_USERNAME']
 PIKA_PASSWORD = os.environ['PIKA_PASSWORD']
+
+
+def set_use_predefined_network(val):
+    global USE_PREDEFINED_NETWORK
+    USE_PREDEFINED_NETWORK = val
+
+
+def set_max_out_degree(val):
+    global MAX_OUT_DEGREE
+    MAX_OUT_DEGREE = val

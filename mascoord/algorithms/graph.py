@@ -135,7 +135,7 @@ class DynaGraph:
         sender = data['agent_id']
         sender_network = data['network']
 
-        if self.network != sender_network and not self.busy:
+        if self.network != sender_network and not self.busy and len(self.children) < config.MAX_OUT_DEGREE:
             self.busy = True
             if config.USE_PREDEFINED_NETWORK:
                 key = f'{self.agent.agent_id},{sender}'
