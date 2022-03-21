@@ -162,6 +162,12 @@ if __name__ == '__main__':
         required=True,
     )
     parser_graph_gen.add_argument(
+        '--num_diff_runs',
+        type=int,
+        help='The number of graphs to generate for each specified out degree',
+        required=True,
+    )
+    parser_graph_gen.add_argument(
         '--num_agents',
         type=int,
         help='The set the number of agents to add to the environment',
@@ -202,13 +208,14 @@ if __name__ == '__main__':
         for degree in args.degrees:
             random.seed(degree)
             config.set_max_out_degree(degree)
-            runner = Runner(args)
-            runner.execute_graph_gen()
-            handlers.save_simulation_handler({
-                'prefix': f'max-deg-{degree}-'
-            })
-            handlers.reset_buffers()
-            runner.release_resources()
+            for k in range(args.num_diff_runs):
+                runner = Runner(args)
+                runner.execute_graph_gen()
+                handlers.save_simulation_handler({
+                    'prefix': f'max-deg-{degree}-graph-{k + 1}-'
+                })
+                handlers.reset_buffers()
+                runner.release_resources()
     elif command == 'simulation':
         start_time = time.time()
         config.set_use_predefined_network(True)
