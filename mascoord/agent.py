@@ -255,7 +255,7 @@ class Agent:
     def get_child_connections_history(self):
         cons = []
         for child in self.graph.children_history:
-            eqn = self.get_constraint(child)
+            eqn = self.graph.children_history[child]
             coefficients = [str(v) for v in eqn.coefficients.values()]
             c_str = ','.join(coefficients)
             cons.append(f'({self.agent_id},{child}):({c_str})')

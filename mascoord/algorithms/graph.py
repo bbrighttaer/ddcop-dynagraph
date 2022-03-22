@@ -16,7 +16,7 @@ class DynaGraph:
         self.channel = self.agent.channel
         self.parent = None
         self.children = []
-        self.children_history = []
+        self.children_history = {}
         self.log = self.agent.log
         self.client = agent.client
         self.responses = collections.deque()
@@ -238,7 +238,7 @@ class DynaGraph:
             constraint = self.agent.get_constraint(sender)
             self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
             self.children.append(sender)
-            self.children_history.append(sender)
+            self.children_history[sender] = constraint
             extra_args = data['extra_args']
             self.agent.connection_extra_args_callback(sender, extra_args)
 

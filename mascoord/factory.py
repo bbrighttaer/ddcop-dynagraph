@@ -161,7 +161,7 @@ if __name__ == '__main__':
         required=True,
     )
     parser_graph_gen.add_argument(
-        '--num_diff_runs',
+        '--num_diff_graphs',
         type=int,
         help='The number of graphs to generate for each specified out degree',
         required=True,
@@ -201,15 +201,15 @@ if __name__ == '__main__':
 
     command = args.command
     if command == 'graph-gen':
-        handlers.metrics.can_save = False
         handlers.set_dcop_algorithm('no-dcop')
         config.shared_config.use_predefined_graph = False
 
         for degree in args.degrees:
             random.seed(degree)
             config.shared_config.max_out_degree = degree
-            for k in range(args.num_diff_runs):
+            for k in range(args.num_diff_graphs):
                 log.info(f'------------- Degree: {degree}, run: {k + 1} ----------------')
+                handlers.metrics.can_save = False
                 runner = Runner(args)
                 runner.execute_graph_gen()
                 handlers.save_simulation_handler({
