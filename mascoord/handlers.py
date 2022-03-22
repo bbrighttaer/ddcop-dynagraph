@@ -313,6 +313,7 @@ class MetricsTable:
         self.ping_msg_resp_count = {}
         self.network_update_comp_count = {}
         self.constraint_changed_count = {}
+        self.disconnection_msg_count = {}
 
         self.last_event = None
         self.last_event_date_time = None
@@ -332,6 +333,7 @@ class MetricsTable:
         ping_msg_resp_count = 0
         network_update_comp_count = 0
         constraint_changed_count = 0
+        disconnection_count = 0
 
         for node in agents.values():
             if not node.terminate:
@@ -348,6 +350,7 @@ class MetricsTable:
                 ping_msg_resp_count += node.ping_msg_resp_count
                 network_update_comp_count += node.network_update_comp_count
                 constraint_changed_count += node.constraint_changed_count
+                disconnection_count += node.disconnection_msg_count
 
                 node.set_edge_costs()
 
@@ -365,8 +368,10 @@ class MetricsTable:
         self.ping_msg_resp_count[self.last_event] = ping_msg_resp_count
         self.network_update_comp_count[self.last_event] = network_update_comp_count
         self.constraint_changed_count[self.last_event] = constraint_changed_count
+        self.disconnection_msg_count[self.last_event] = disconnection_count
 
-        save_simulation_metrics_handler()
+        if self.can_save:
+            save_simulation_metrics_handler()
 
     def update_edge_cost(self, agent1, agent2, cost):
         k1 = agent1
@@ -396,6 +401,7 @@ class MetricsTable:
                 'ping_msg_resp_count': list(self.ping_msg_resp_count.values()),
                 'network_update_comp_count': list(self.network_update_comp_count.values()),
                 'constraint_changed_count': list(self.constraint_changed_count.values()),
+                'disconnection_msg_count': list(self.disconnection_msg_count.values()),
             })
             df.to_csv(path, index=False)
 

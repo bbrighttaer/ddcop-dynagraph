@@ -23,6 +23,7 @@ class DynaGraph:
         self.network = ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
         self.pinged_list_dict = {}
         self.busy = False
+        self.can_pub_connect = True
 
     def has_no_neighbors(self):
         return not self.parent and not self.children
@@ -54,12 +55,12 @@ class DynaGraph:
                                            'network': self.network,
                                            'thread_id': thread_id or self.agent.agent_id,
                                        }))
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                   body=messaging.create_set_network_message({
-                                       'agent_id': self.agent.agent_id,
-                                       'network': self.network,
-                                   }))
+        # self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+        #                            routing_key=f'{messaging.MONITORING_CHANNEL}',
+        #                            body=messaging.create_set_network_message({
+        #                                'agent_id': self.agent.agent_id,
+        #                                'network': self.network,
+        #                            }))
 
     def remove_inactive_connections(self):
         """remove agents that are still in the pinged list"""
@@ -307,6 +308,8 @@ class DynaGraph:
             self.agent.active_constraints.pop(f'{self.agent.agent_id},{sender}')
             self.agent.agent_disconnection_callback(sender)
             self.report_agent_disconnection(sender)
+
+        self.log.info(f'Disconnected from agent {sender}')
 
     def ping_neighbors(self):
         for agent in self.neighbors:

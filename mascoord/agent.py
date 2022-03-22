@@ -79,6 +79,7 @@ class Agent:
         self.ping_msg_resp_count = 0
         self.network_update_comp_count = 0
         self.constraint_changed_count = 0
+        self.disconnection_msg_count = 0
 
         self.client = pika.BlockingConnection(
             pika.ConnectionParameters(
@@ -111,6 +112,8 @@ class Agent:
         # algorithms
         self.graph = graph.DynaGraph(self)
         self.dcop = dcop_algorithm(self, num_discrete_points=kwargs['domain_size'])
+
+        self.report_shutdown = False
 
     @property
     def graph_traversing_order(self):
@@ -179,6 +182,7 @@ class Agent:
 
     def shutdown(self):
         self.terminate = True
+        self.report_shutdown = True
         self.metrics.update_metrics()
 
     def send_report(self):
@@ -326,6 +330,11 @@ class Agent:
             self.increment_messages_count()
             self.constraint_changed_count += 1
 
+        elif message_type == messaging.DISCONNECTION_MESSAGE:
+            self.graph.receive_disconnection_message(payload)
+            self.increment_messages_count()
+            self.disconnection_msg_count += 1
+
         # C-CoCoA message handling
         elif message_type == messaging.UPDATE_STATE_MESSAGE:
             self.dcop.receive_update_state_message(payload)
@@ -359,6 +368,9 @@ class Agent:
         # elif message_type == messaging.NEIGHBOR_STATE_REQUEST_RESPONSE:
         #     self.dcop.receive_state_request_response(payload)
 
+        else:
+            self.log.info(f'Could not handle received payload: {payload}')
+
     def __call__(self, *args, **kwargs):
         self.log.info('Initializing...')
         self.metrics.update_metrics()
@@ -367,8 +379,13 @@ class Agent:
 
         last_ping_call_time = None
 
+        count = config.CONNECT_CALL_DELAY_COUNT
+
         while not self.terminate:
-            self.graph.connect()
+            if count == config.CONNECT_CALL_DELAY_COUNT:
+                self.graph.connect()
+                count = 0
+            count += 1
 
             # process network events
             self.listen_to_network()
@@ -395,13 +412,14 @@ class Agent:
         self._start_time()
 
     def release_resources(self):
-        # inform dashboard
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                   body=messaging.create_agent_shutdown_message({
-                                       'agent_id': self.agent_id,
-                                       'network': self.graph.network,
-                                   }))
+        if self.report_shutdown:
+            # inform dashboard
+            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                       routing_key=f'{messaging.MONITORING_CHANNEL}',
+                                       body=messaging.create_agent_shutdown_message({
+                                           'agent_id': self.agent_id,
+                                           'network': self.graph.network,
+                                       }))
         # remove rabbitmq resources
         self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
                                   queue=self.queue,

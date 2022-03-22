@@ -201,7 +201,7 @@ if __name__ == '__main__':
 
     command = args.command
     if command == 'graph-gen':
-        handlers.metrics.can_save = True
+        handlers.metrics.can_save = False
         handlers.set_dcop_algorithm('no-dcop')
         config.shared_config.use_predefined_graph = False
 
