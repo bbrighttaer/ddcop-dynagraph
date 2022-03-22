@@ -185,7 +185,7 @@ def remove_agent_handler(msg):
 def change_constraint_handler(msg):
     if agents:
         for i in range(msg['num_agents']):
-            coefficients = [round(random.uniform(0, 1), 3) for _ in range(3)]
+            coefficients = [round(random.uniform(-5, 5), 3) for _ in range(3)]
             selected_id = random.choice(list(agents.keys()))
             selected_agent = agents[selected_id]
             selected_neighbor = selected_agent.select_random_neighbor()

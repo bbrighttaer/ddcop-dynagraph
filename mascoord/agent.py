@@ -166,7 +166,8 @@ class Agent:
 
     def get_constraint(self, sender_id, coefficients: list = None):
         if not coefficients:
-            coefficients = self.coefficients_dict.get(f'{self.agent_id},{sender_id}', [1, 1, 1])
+            coefficients = self.coefficients_dict.get(f'{self.agent_id},{sender_id}',
+                                                      [round(random.uniform(-5, 5), 3) for _ in range(3)])
         equation_class = equations.equations_directory[Quadratic.name]
         constraint = equation_class(*coefficients)
         return constraint
