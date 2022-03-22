@@ -61,6 +61,7 @@ class Agent:
         self.active_constraints = {}
         self.coefficients_dict = kwargs['coefficients_dict'] if 'coefficients_dict' in kwargs else {}
         self.metrics = kwargs['metrics']
+        self.shared_config = kwargs['shared_config']
 
         self.is_client_asleep = False
 
@@ -390,7 +391,7 @@ class Agent:
 
     def listen_to_network(self):
         self._time_lapse()
-        self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
+        self.client.sleep(config.AGENT_COMM_TIMEOUT_IN_SECONDS)
         self._start_time()
 
     def release_resources(self):

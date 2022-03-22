@@ -88,7 +88,6 @@ class Runner:
     def execute_sim_with_dashboard(self):
         log.info('Executing sim with dashboard (start dashboard to execute commands)')
         random.seed(0)
-        handlers.set_dcop_algorithm(self.exec_args.algs[0])
         while not self.terminate:
             self.client.sleep(0)
         self.release_resources()
@@ -106,7 +105,7 @@ class Runner:
             handlers.remove_agent_handler({'num_agents': 1})
 
     def execute_sim_from_files(self, sim_file):
-        log.info(f'Executing from sim files, using predefined network: {config.USE_PREDEFINED_NETWORK}')
+        log.info(f'Executing from sim files, using predefined network: {config.shared_config.use_predefined_graph}')
         handlers.play_simulation_handler({'simulation': sim_file})
 
     def release_resources(self):
@@ -177,13 +176,13 @@ if __name__ == '__main__':
         '--num_remove',
         type=int,
         help='The set the number of agents to remove from the environment',
-        required=True,
+        default=0,
     )
     parser_graph_gen.add_argument(
         '--num_const_change',
         type=int,
         help='The set the number of agents that change their constraints in the environment',
-        required=True,
+        default=0,
     )
 
     # simulation
@@ -202,13 +201,15 @@ if __name__ == '__main__':
 
     command = args.command
     if command == 'graph-gen':
+        handlers.metrics.can_save = True
         handlers.set_dcop_algorithm('no-dcop')
-        config.set_use_predefined_network(False)
+        config.shared_config.use_predefined_graph = False
 
         for degree in args.degrees:
             random.seed(degree)
-            config.set_max_out_degree(degree)
+            config.shared_config.max_out_degree = degree
             for k in range(args.num_diff_runs):
+                log.info(f'------------- Degree: {degree}, run: {k + 1} ----------------')
                 runner = Runner(args)
                 runner.execute_graph_gen()
                 handlers.save_simulation_handler({
@@ -216,9 +217,10 @@ if __name__ == '__main__':
                 })
                 handlers.reset_buffers()
                 runner.release_resources()
+        sim_time = time_since(start_time)
+        log.info(f'Simulation elapsed time: {sim_time}')
     elif command == 'simulation':
-        start_time = time.time()
-        config.set_use_predefined_network(True)
+        config.shared_config.use_predefined_graph = True
         simulations = os.listdir('simulations')
         sim_files = [file for file in simulations if '.sim' in file]
 
@@ -227,16 +229,16 @@ if __name__ == '__main__':
             for i in range(args.num_runs):
                 random.seed(i)
                 for filename in sim_files:
+                    log.info(f'---------- Executing: {algorithm}, run: {i + 1}, filename: {filename} -------------')
                     handlers.set_metrics_file_prefix(f'{filename}-run-{i + 1}-')
                     runner = Runner(args)
                     runner.execute_sim_from_files(filename)
-                    time.sleep(5)
-                    handlers.save_simulation_metrics_handler()
                     handlers.reset_buffers()
                     runner.release_resources()
 
         sim_time = time_since(start_time)
         log.info(f'Simulation elapsed time: {sim_time}')
     else:
+        handlers.set_dcop_algorithm(args.algs[0])
         runner = Runner(args)
         runner.execute_sim_with_dashboard()

@@ -2,7 +2,6 @@ import collections
 import random
 import string
 
-from mascoord import config
 from mascoord import messaging
 from mascoord.config import MAX_PING_COUNT
 
@@ -134,10 +133,11 @@ class DynaGraph:
         data = payload['payload']
         sender = data['agent_id']
         sender_network = data['network']
+        max_out_degree = self.agent.shared_config.max_out_degree
 
-        if self.network != sender_network and not self.busy and len(self.children) < config.MAX_OUT_DEGREE:
+        if self.network != sender_network and not self.busy and len(self.children) < max_out_degree:
             self.busy = True
-            if config.USE_PREDEFINED_NETWORK:
+            if self.agent.shared_config.use_predefined_graph:
                 key = f'{self.agent.agent_id},{sender}'
                 if key in self.agent.coefficients_dict:
                     self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
@@ -168,13 +168,13 @@ class DynaGraph:
         extra_args = data['extra_args']
 
         key = f'{sender},{self.agent.agent_id}'
-        saved_sim = config.USE_PREDEFINED_NETWORK
+        use_predefined_graph = self.agent.shared_config.use_predefined_graph
 
         if not self.busy and not self.parent \
                 and not self.is_neighbor(sender) \
                 and sender not in self.responses \
                 and self.network != network \
-                and ((saved_sim and key in self.agent.coefficients_dict) or not saved_sim):
+                and ((use_predefined_graph and key in self.agent.coefficients_dict) or not use_predefined_graph):
             self.busy = True
 
             self.log.debug('receive_announce_response_message' + str(self.responses))
@@ -259,8 +259,7 @@ class DynaGraph:
                 self.reset()
 
         # announce cycle is complete so remove this sender to allow future connections
-        if not config.USE_PREDEFINED_NETWORK:
-            self.responses.remove(sender)
+        self.responses.remove(sender)
         self.busy = False
 
     def receive_set_network_message(self, payload):
