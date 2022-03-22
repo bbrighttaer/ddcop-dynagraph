@@ -4,7 +4,6 @@ import numpy as np
 
 from mascoord import config
 from mascoord import messaging
-from mascoord.handlers import MetricsTable
 
 
 class DCOP:
@@ -19,12 +18,16 @@ class DCOP:
         self.agent = agent
         self.graph = self.agent.graph
         self.domain = random.sample(range(domain_lb, domain_ub), num_discrete_points)
+        # self.domain = [-10.0, 5.0, 12.0] # random.sample(range(domain_lb, domain_ub), num_discrete_points)
+        # self.domain = [-43, 21, 49, 8, 19, -24, 24, -2, -32, 33, -42, -3, 10, -31, -40, -16, 40, 25, 4, -8, -38,
+        #                -21, -33, 34, 46, -5, 13, 45, -39, -49, -12, -35, -44, 2, -30, -9, 1, -15, -25, 16]
         self.domain_lb = domain_lb
         self.domain_ub = domain_ub
         self.state = None
         self.value = None
         self.cpa = {}
         self.cost = 0
+        self.params = {}
 
     def calculate_and_report_cost(self, best_params):
         """
@@ -38,6 +41,18 @@ class DCOP:
         self.log.info(f'Cost is {self.cost}')
 
         self.collect_metrics()
+
+    def set_edge_costs(self):
+        try:
+            if self.params:
+                for neighbor in self.graph.neighbors:
+                    constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
+                    n_value = self.params[neighbor]
+                    if n_value:
+                        cost = constraint.equation.evaluate({'x': self.value, 'y': n_value})
+                        self.agent.metrics.update_edge_cost(self.agent.agent_id, neighbor, cost)
+        except:
+            pass
 
     def collect_metrics(self):
         self.log.info('DCOP done')
@@ -67,7 +82,7 @@ class DCOP:
         """
         Provides any custom arguments to be sent when the agent connects to another agent
         """
-        return {}
+        return {'alg': self.name}
 
     def receive_extra_args(self, sender, args):
         """
@@ -189,6 +204,7 @@ class CCoCoA(DCOP):
             self.value = min(max(self.domain_lb, self.value), self.domain_ub)
 
         # update agent
+        self.agent.value_changes_count += 1
         self.cpa[f'agent-{self.agent.agent_id}'] = self.value
         self.state = self.DONE
         self.report_state_change_to_dashboard()
@@ -202,7 +218,7 @@ class CCoCoA(DCOP):
             })
 
         self.cost_map.clear()
-
+        self.params = best_params
         self.calculate_and_report_cost(best_params)
 
     def can_resolve_agent_value(self) -> bool:
@@ -322,9 +338,18 @@ class SDPOP(DCOP):
         self.X_ij = None
         self.util_received = False
 
+    def set_edge_costs(self):
+        """
+        Trick to get values of neighbors in before setting edge costs
+        """
+        for agent in self.graph.neighbors:
+            self.params[agent] = self.agent.metrics.get_agent_value(agent)
+        super(SDPOP, self).set_edge_costs()
+
     def connection_extra_args(self) -> dict:
         return {
             'domain': self.domain,
+            'alg': self.name,
         }
 
     def receive_extra_args(self, sender, args):
@@ -358,9 +383,12 @@ class SDPOP(DCOP):
 
             self.send_util_message(self.graph.parent, x_j.tolist())
         else:
-            utils = c_util_sum.reshape(-1, )
-            self.cost = float(utils.min())
-            self.value = int(utils.argmin())
+            # parent-level projection
+            x_i = np.min(c_util_sum, axis=0)
+
+            self.cost = float(np.min(x_i))
+            self.value = self.domain[int(np.argmin(x_i))]
+            self.agent.value_changes_count += 1
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
             self.log.info(f'Cost is {self.cost}')
@@ -422,9 +450,11 @@ class SDPOP(DCOP):
             parent_cpa = value['cpa']
             parent_value = parent_cpa[f'agent-{sender}']
             self.cpa = parent_cpa
-            x_i = self.X_ij[:, parent_value].reshape(-1, )
+            j = self.neighbor_domains[sender].index(parent_value)
+            x_i = self.X_ij[:, j].reshape(-1, )
             self.cost = float(x_i.min())
-            self.value = int(x_i.argmin())
+            self.value = self.domain[int(x_i.argmin())]
+            self.agent.value_changes_count += 1
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
             self.log.info(f'Cost is {self.cost}')
@@ -460,3 +490,122 @@ class SDPOP(DCOP):
 
     def __str__(self):
         return 'sdpop'
+
+
+class CSDPOP(SDPOP):
+    """
+    A continuous domain analogue of the SDPOP algorithm
+    """
+    name = 'c-sdpop'
+
+    def __init__(self, *args, **kwargs):
+        super(CSDPOP, self).__init__(*args, **kwargs)
+        self.max_iter = 100
+        self.alpha = config.LEARNING_RATE
+
+    def _compute_util_and_value(self):
+        # children
+        c_util_sum = np.zeros((len(self.domain), len(self.domain)))
+        for child in self.graph.children:
+            c_util = self.util_messages[child]
+            c_util_sum += np.array(c_util)
+
+        # parent
+        if self.graph.parent:
+            p_domain = self.neighbor_domains[self.graph.parent]
+
+            x = np.array(self.domain).reshape(-1, 1)
+            y = np.array(p_domain).reshape(-1, 1)
+            xx, yy = np.meshgrid(x, y, indexing='ij')
+
+            constraint = self.agent.active_constraints[f'{self.agent.agent_id},{self.graph.parent}']
+            self.X_ij = constraint.equation.evaluate({'x': xx, 'y': yy}) + c_util_sum.T
+
+            self.send_util_message(self.graph.parent, self.X_ij.tolist())
+        else:
+            # parent-level projection
+            x_i = np.min(c_util_sum, axis=0)
+
+            # set this agent's initial value
+            j = int(np.argmin(x_i))
+            self.value = self.domain[j]
+
+            # get initial agent values for optimization
+            initial_val = self.value
+            agent_values = {self.agent.agent_id: self.value}
+            for child in self.graph.children:
+                c_util = np.array(self.util_messages[child])
+                agent_values[child] = self.neighbor_domains[child][np.argmin(c_util[:, j])]
+
+            self.nonlinear_optimization(agent_values)
+
+            self.cpa[f'agent-{self.agent.agent_id}'] = self.value
+
+            self.log.info(f'Cost is {self.cost}')
+
+            # send value msgs to children
+            self.log.info(f'children: {self.graph.children}')
+            for child in self.graph.children:
+                self.send_value_message(child, {'cpa': self.cpa, 'initial-value': initial_val})
+
+        self.util_received = False
+
+    def receive_value_message(self, payload):
+        self.log.info(f'Received value message: {payload}')
+        data = payload['payload']
+        sender = data['agent_id']
+        value = data['value']
+
+        # determine own value from parent's value
+        if self.graph.is_parent(sender) and self.X_ij is not None:
+            parent_cpa = value['cpa']
+            parent_value = parent_cpa[f'agent-{sender}']
+            parent_initial_value = value['initial-value']
+            self.cpa = parent_cpa
+
+            j = self.neighbor_domains[sender].index(parent_initial_value)
+            x_i = self.X_ij[:, j].reshape(-1, )
+
+            self.value = self.domain[int(x_i.argmin())]
+            initial_val = self.value
+
+            agent_values = {
+                self.agent.agent_id: self.value,
+                sender: parent_value,
+            }
+
+            k = self.domain.index(self.value)
+            for child in self.graph.children:
+                c_util = np.array(self.util_messages[child])
+                agent_values[child] = self.neighbor_domains[child][np.argmin(c_util[:, k])]
+
+            self.nonlinear_optimization(agent_values)
+
+            self.cpa[f'agent-{self.agent.agent_id}'] = self.value
+
+            self.log.info(f'Cost is {self.cost}')
+
+            # send value msgs to children
+            for child in self.graph.children:
+                self.send_value_message(child, {'cpa': self.cpa, 'initial-value': initial_val})
+
+    def nonlinear_optimization(self, agent_values):
+        # non-linear optimization
+        for i in range(self.max_iter):
+            grad_sum = 0
+            for neighbor in self.graph.neighbors:
+                constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
+                n_value = agent_values[neighbor]
+                grad_sum += constraint.ddx.evaluate({'x': self.value, 'y': n_value})
+
+                # child value optimization (parent value is already set)
+                if self.graph.is_child(neighbor):
+                    n_grad = constraint.ddy.evaluate({'x': self.value, 'y': n_value})
+                    n_value = n_value - self.alpha * n_grad
+                    agent_values[neighbor] = min(max(self.domain_lb, n_value), self.domain_ub)
+
+            self.value = self.value - self.alpha * grad_sum
+            self.value = min(max(self.domain_lb, self.value), self.domain_ub)
+        self.agent.value_changes_count += 1
+        self.params = agent_values
+        self.calculate_and_report_cost(agent_values)

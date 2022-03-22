@@ -2,7 +2,6 @@ import collections
 import random
 import string
 
-from mascoord import config
 from mascoord import messaging
 from mascoord.config import MAX_PING_COUNT
 
@@ -24,6 +23,7 @@ class DynaGraph:
         self.network = ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
         self.pinged_list_dict = {}
         self.busy = False
+        self.can_pub_connect = True
 
     def has_no_neighbors(self):
         return not self.parent and not self.children
@@ -55,12 +55,12 @@ class DynaGraph:
                                            'network': self.network,
                                            'thread_id': thread_id or self.agent.agent_id,
                                        }))
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                   body=messaging.create_set_network_message({
-                                       'agent_id': self.agent.agent_id,
-                                       'network': self.network,
-                                   }))
+        # self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+        #                            routing_key=f'{messaging.MONITORING_CHANNEL}',
+        #                            body=messaging.create_set_network_message({
+        #                                'agent_id': self.agent.agent_id,
+        #                                'network': self.network,
+        #                            }))
 
     def remove_inactive_connections(self):
         """remove agents that are still in the pinged list"""
@@ -134,10 +134,11 @@ class DynaGraph:
         data = payload['payload']
         sender = data['agent_id']
         sender_network = data['network']
+        max_out_degree = self.agent.shared_config.max_out_degree
 
-        if self.network != sender_network and not self.busy:
+        if self.network != sender_network and not self.busy and len(self.children) < max_out_degree:
             self.busy = True
-            if config.USE_PREDEFINED_NETWORK:
+            if self.agent.shared_config.use_predefined_graph:
                 key = f'{self.agent.agent_id},{sender}'
                 if key in self.agent.coefficients_dict:
                     self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
@@ -168,13 +169,13 @@ class DynaGraph:
         extra_args = data['extra_args']
 
         key = f'{sender},{self.agent.agent_id}'
-        saved_sim = config.USE_PREDEFINED_NETWORK
+        use_predefined_graph = self.agent.shared_config.use_predefined_graph
 
         if not self.busy and not self.parent \
                 and not self.is_neighbor(sender) \
                 and sender not in self.responses \
                 and self.network != network \
-                and ((saved_sim and key in self.agent.coefficients_dict) or not saved_sim):
+                and ((use_predefined_graph and key in self.agent.coefficients_dict) or not use_predefined_graph):
             self.busy = True
 
             self.log.debug('receive_announce_response_message' + str(self.responses))
@@ -259,8 +260,7 @@ class DynaGraph:
                 self.reset()
 
         # announce cycle is complete so remove this sender to allow future connections
-        if not config.USE_PREDEFINED_NETWORK:
-            self.responses.remove(sender)
+        self.responses.remove(sender)
         self.busy = False
 
     def receive_set_network_message(self, payload):
@@ -308,6 +308,8 @@ class DynaGraph:
             self.agent.active_constraints.pop(f'{self.agent.agent_id},{sender}')
             self.agent.agent_disconnection_callback(sender)
             self.report_agent_disconnection(sender)
+
+        self.log.info(f'Disconnected from agent {sender}')
 
     def ping_neighbors(self):
         for agent in self.neighbors:

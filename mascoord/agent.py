@@ -61,19 +61,36 @@ class Agent:
         self.active_constraints = {}
         self.coefficients_dict = kwargs['coefficients_dict'] if 'coefficients_dict' in kwargs else {}
         self.metrics = kwargs['metrics']
+        self.shared_config = kwargs['shared_config']
 
         self.is_client_asleep = False
 
         self.messages_count = 0
+        self.value_changes_count = 0
         self.start_time = time.time()
         self.accum_time = 0
 
-        self.client = pika.BlockingConnection(pika.ConnectionParameters(host=config.BROKER_URL,
-                                                                        port=config.BROKER_PORT))
+        # dynamic graph stats
+        self.announce_msg_count = 0
+        self.announce_res_msg_count = 0
+        self.announce_resp_msg_ack_count = 0
+        self.set_network_count = 0
+        self.ping_msg_count = 0
+        self.ping_msg_resp_count = 0
+        self.network_update_comp_count = 0
+        self.constraint_changed_count = 0
+        self.disconnection_msg_count = 0
+
+        self.client = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=config.BROKER_URL,
+                port=config.BROKER_PORT,
+                credentials=pika.credentials.PlainCredentials(config.PIKA_USERNAME, config.PIKA_PASSWORD)
+            ))
         self.channel = self.client.channel()
         # self.client.add_callback_threadsafe(callback=self.start)
         self.queue = f'queue-{self.agent_id}'
-        self.channel.queue_declare(self.queue, exclusive=True)
+        self.channel.queue_declare(self.queue, exclusive=False)
 
         self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
                                 queue=self.queue,
@@ -95,6 +112,8 @@ class Agent:
         # algorithms
         self.graph = graph.DynaGraph(self)
         self.dcop = dcop_algorithm(self, num_discrete_points=kwargs['domain_size'])
+
+        self.report_shutdown = False
 
     @property
     def graph_traversing_order(self):
@@ -163,6 +182,7 @@ class Agent:
 
     def shutdown(self):
         self.terminate = True
+        self.report_shutdown = True
         self.metrics.update_metrics()
 
     def send_report(self):
@@ -263,6 +283,9 @@ class Agent:
         neighbor_id = selected.split(',')[1]
         return neighbor_id
 
+    def set_edge_costs(self):
+        self.dcop.set_edge_costs()
+
     def handle_message(self, payload):
         message_type = payload['type']
 
@@ -270,34 +293,47 @@ class Agent:
         if message_type == messaging.ANNOUNCE_MSG:
             self.graph.receive_announce_message(payload)
             # self.increment_messages_count()
+            self.announce_msg_count += 1
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG:
             self.graph.receive_announce_response_message(payload)
             self.increment_messages_count()
+            self.announce_res_msg_count += 1
 
         elif message_type == messaging.ANNOUNCE_RESPONSE_MSG_ACK:
             self.graph.receive_announce_response_message_ack(payload)
             self.increment_messages_count()
+            self.announce_resp_msg_ack_count += 1
 
         elif message_type == messaging.SET_NETWORK:
             self.graph.receive_set_network_message(payload)
             self.increment_messages_count()
+            self.set_network_count += 1
 
         elif message_type == messaging.PING_MESSAGE:
             self.graph.receive_ping_message(payload)
-            self.increment_messages_count()
+            # self.increment_messages_count()
+            self.ping_msg_count += 1
 
         elif message_type == messaging.PING_RESPONSE_MESSAGE:
             self.graph.receive_ping_response_message(payload)
-            self.increment_messages_count()
+            # self.increment_messages_count()
+            self.ping_msg_resp_count += 1
 
         elif message_type == messaging.NETWORK_UPDATE_COMPLETION:
             self.graph.receive_network_update_completion_message(payload)
             self.increment_messages_count()
+            self.network_update_comp_count += 1
 
         elif message_type == messaging.CONSTRAINT_CHANGED:
             self.graph.receive_constraint_changed_message(payload)
             self.increment_messages_count()
+            self.constraint_changed_count += 1
+
+        elif message_type == messaging.DISCONNECTION_MESSAGE:
+            self.graph.receive_disconnection_message(payload)
+            self.increment_messages_count()
+            self.disconnection_msg_count += 1
 
         # C-CoCoA message handling
         elif message_type == messaging.UPDATE_STATE_MESSAGE:
@@ -332,6 +368,9 @@ class Agent:
         # elif message_type == messaging.NEIGHBOR_STATE_REQUEST_RESPONSE:
         #     self.dcop.receive_state_request_response(payload)
 
+        else:
+            self.log.info(f'Could not handle received payload: {payload}')
+
     def __call__(self, *args, **kwargs):
         self.log.info('Initializing...')
         self.metrics.update_metrics()
@@ -340,8 +379,13 @@ class Agent:
 
         last_ping_call_time = None
 
+        count = config.CONNECT_CALL_DELAY_COUNT
+
         while not self.terminate:
-            self.graph.connect()
+            if count == config.CONNECT_CALL_DELAY_COUNT:
+                self.graph.connect()
+                count = 0
+            count += 1
 
             # process network events
             self.listen_to_network()
@@ -364,17 +408,18 @@ class Agent:
 
     def listen_to_network(self):
         self._time_lapse()
-        self.client.sleep(config.COMM_TIMEOUT_IN_SECONDS)
+        self.client.sleep(config.AGENT_COMM_TIMEOUT_IN_SECONDS)
         self._start_time()
 
     def release_resources(self):
-        # inform dashboard
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                   body=messaging.create_agent_shutdown_message({
-                                       'agent_id': self.agent_id,
-                                       'network': self.graph.network,
-                                   }))
+        if self.report_shutdown:
+            # inform dashboard
+            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                       routing_key=f'{messaging.MONITORING_CHANNEL}',
+                                       body=messaging.create_agent_shutdown_message({
+                                           'agent_id': self.agent_id,
+                                           'network': self.graph.network,
+                                       }))
         # remove rabbitmq resources
         self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
                                   queue=self.queue,
@@ -386,6 +431,8 @@ class Agent:
                                   queue=self.queue,
                                   routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#')
         self.channel.queue_delete(self.queue)
+        self.channel.close()
+        self.client.close()
 
     def register_agent(self):
         # register with dashboard

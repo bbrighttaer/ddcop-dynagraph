@@ -6,6 +6,13 @@ function Console() {
     const dispatch = useDispatch();
 
     const messages = useSelector(state => state.app.receivedMessages);
+    messages.sort((m1, m2) => {
+        if (m1.timestamp > m2.timestamp) {
+            return -1;
+        } else {
+            return 1;
+        }
+    });
 
     const handleOnClick = (index) => {
         dispatch(setSelectedMessageIndex(index));

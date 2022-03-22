@@ -11,8 +11,10 @@ import config
 import logger
 import messaging
 import utils
+from mascoord.algorithms.dcop import DCOP, CSDPOP
 
 agents = {}
+terminated_agents = []
 agent_id_to_thread = {}
 
 log = logger.get_logger('factory-handler')
@@ -25,7 +27,6 @@ CHANGE_CONSTRAINT = 'change_constraint'
 last_event = None
 last_event_date_time = None
 dcop_algorithm = None
-metrics_agent = None
 
 costs_per_event = {}
 num_mgs_per_event = {}
@@ -33,13 +34,49 @@ time_per_event = {}
 
 domain_size = 2
 
+metrics_file_prefix = None
+
+
+def reset_buffers():
+    log.info('----------------- Resetting handler buffers ----------------------')
+
+    global last_event
+    global last_event_date_time
+    global metrics
+
+    last_event = None
+    last_event_date_time = None
+
+    for agent_id in agents:
+        node = agents[agent_id]
+        if not node.terminate:
+            node.terminate = True
+
+    for agent_id in agent_id_to_thread:
+        agent_id_to_thread[agent_id].join()
+
+    agents.clear()
+    terminated_agents.clear()
+    agent_id_to_thread.clear()
+
+    costs_per_event.clear()
+    num_mgs_per_event.clear()
+    time_per_event.clear()
+
+    commands.clear()
+
+    metrics = MetricsTable()
+
+    log.info('----------------- Reset complete ----------------------')
+
 
 def create_and_start_agent(agent_id):
     if dcop_algorithm:
         dcop_agent = agent.Agent(agent_id, dcop_algorithm,
                                  coefficients_dict=utils.coefficients_dict,
                                  domain_size=domain_size,
-                                 metrics=metrics)
+                                 metrics=metrics,
+                                 shared_config=config.shared_config)
         agents[agent_id] = dcop_agent
         dcop_agent()
     else:
@@ -53,7 +90,8 @@ def set_dcop_algorithm(alg):
     dcop_algorithm = {
         'c-cocoa': CCoCoA,
         'sdpop': SDPOP,
-    }.get(alg)
+        'c-sdpop': CSDPOP,
+    }.get(alg, DCOP)
 
 
 def set_domain_size(size):
@@ -68,7 +106,7 @@ def test_msg_handler(msg):
 def add_agent_handler(msg):
     num_agents = msg['num_agents']
     log.info(f'Number of agents to add = {num_agents}')
-    if config.USE_PREDEFINED_NETWORK:
+    if config.shared_config.use_predefined_graph:
         nodes = utils.nodes_list
         for _ in range(num_agents):
             agent_id = nodes[len(agents)]
@@ -80,7 +118,7 @@ def add_agent_handler(msg):
 
             _spawn_agent(agent_id)
 
-            time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
+            time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
     else:
         for i in range(num_agents):
             agent_id = len(agents)
@@ -92,7 +130,7 @@ def add_agent_handler(msg):
 
             _spawn_agent(agent_id=agent_id)
 
-            time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
+            time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
 
     # time.sleep(2)
     # client.publish(f'{messaging.FACTORY_COMMAND_CHANNEL}/',
@@ -103,7 +141,7 @@ def add_agent_handler(msg):
 
 def _spawn_agent(agent_id):
     t = threading.Thread(target=create_and_start_agent, args=(str(agent_id),))
-    agent_id_to_thread[agent_id] = t
+    agent_id_to_thread[str(agent_id)] = t
     t.start()
 
 
@@ -114,7 +152,7 @@ def remove_agent_handler(msg):
             selected_agent = None
             found = False
 
-            if config.USE_PREDEFINED_NETWORK:
+            if config.shared_config.use_predefined_graph:
                 selected_id = msg['agent_id']
                 selected_agent = agents[selected_id]
             else:
@@ -135,8 +173,10 @@ def remove_agent_handler(msg):
                 metrics.last_event_date_time = datetime.datetime.now()
 
                 selected_agent.shutdown()
+                agent_id_to_thread[selected_id].join()
+                terminated_agents.append(selected_agent)
 
-                time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
+                time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
 
                 # agents.pop(selected_id)
                 log.info(f'Removed agent {selected_agent}')
@@ -158,7 +198,7 @@ def change_constraint_handler(msg):
 
             selected_agent.change_constraint(coefficients, selected_neighbor)
 
-            time.sleep(config.COMM_EXEC_DELAY_IN_SECONDS)
+            time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
 
 
 def agent_report_handler(msg):
@@ -196,7 +236,9 @@ def save_simulation_handler(msg):
     lines.append(f'cons={">".join(cons)}\n')
     lines.append(f'domains={" ".join(domains)}\n')
 
-    sim_file = os.path.join(base_path, f'{label}.sim')
+    prefix = msg['prefix'] if 'prefix' in msg else ''
+    suffix = msg['suffix'] if 'suffix' in msg else ''
+    sim_file = os.path.join(base_path, f'{prefix}{label}{suffix}.sim')
     with open(sim_file, 'w') as file:
         file.writelines(lines)
 
@@ -226,9 +268,15 @@ def play_simulation_handler(msg):
     log.info('End of simulation')
 
 
+def set_metrics_file_prefix(val):
+    global metrics_file_prefix
+    metrics_file_prefix = val
+
+
 def save_simulation_metrics_handler(msg=None):
+    prefix = metrics_file_prefix if metrics_file_prefix else ''
     os.makedirs('metrics', exist_ok=True)
-    label = f'{dcop_algorithm.name}-d{domain_size}'
+    label = f'{prefix}{dcop_algorithm.name}-d{domain_size}Lr{config.LEARNING_RATE}'
     metrics_file = os.path.join('metrics/', f'{label}.csv')
     metrics.to_csv(metrics_file)
     log.info(f'Metrics saved at {metrics_file}')
@@ -251,31 +299,117 @@ class MetricsTable:
 
     def __init__(self):
         self.cost = {}
+        self.edge_cost_per_event = {}
+        self.edge_cost_per_agent = {}
         self.message_count = {}
+        self.num_changes_per_event = {}
+        self.num_agents_per_event = {}
+
+        self.announce_msg_count = {}
+        self.announce_res_msg_count = {}
+        self.announce_resp_msg_ack_count = {}
+        self.set_network_count = {}
+        self.ping_msg_count = {}
+        self.ping_msg_resp_count = {}
+        self.network_update_comp_count = {}
+        self.constraint_changed_count = {}
+        self.disconnection_msg_count = {}
+
         self.last_event = None
         self.last_event_date_time = None
+
+        self.can_save = True
 
     def update_metrics(self):
         messages_count = 0
         total_cost = 0
+        num_changes = 0
+        num_active_agents = 0
+        announce_msg_count = 0
+        announce_res_msg_count = 0
+        announce_resp_msg_ack_count = 0
+        set_network_count = 0
+        ping_msg_count = 0
+        ping_msg_resp_count = 0
+        network_update_comp_count = 0
+        constraint_changed_count = 0
+        disconnection_count = 0
+
         for node in agents.values():
             if not node.terminate:
+                num_active_agents += 1
                 messages_count += node.messages_count
                 total_cost += node.cost
+                num_changes += node.value_changes_count
+
+                announce_msg_count += node.announce_msg_count
+                announce_res_msg_count += node.announce_res_msg_count
+                announce_resp_msg_ack_count += node.announce_resp_msg_ack_count
+                set_network_count += node.set_network_count
+                ping_msg_count += node.ping_msg_count
+                ping_msg_resp_count += node.ping_msg_resp_count
+                network_update_comp_count += node.network_update_comp_count
+                constraint_changed_count += node.constraint_changed_count
+                disconnection_count += node.disconnection_msg_count
+
+                node.set_edge_costs()
 
         self.cost[self.last_event] = total_cost
+        self.edge_cost_per_event[self.last_event] = sum(self.edge_cost_per_agent.values())
         self.message_count[self.last_event] = messages_count
+        self.num_changes_per_event[self.last_event] = num_changes
+        self.num_agents_per_event[self.last_event] = num_active_agents
 
-        save_simulation_metrics_handler()
+        self.announce_msg_count[self.last_event] = announce_msg_count
+        self.announce_res_msg_count[self.last_event] = announce_res_msg_count
+        self.announce_resp_msg_ack_count[self.last_event] = announce_resp_msg_ack_count
+        self.set_network_count[self.last_event] = set_network_count
+        self.ping_msg_count[self.last_event] = ping_msg_count
+        self.ping_msg_resp_count[self.last_event] = ping_msg_resp_count
+        self.network_update_comp_count[self.last_event] = network_update_comp_count
+        self.constraint_changed_count[self.last_event] = constraint_changed_count
+        self.disconnection_msg_count[self.last_event] = disconnection_count
+
+        if self.can_save:
+            save_simulation_metrics_handler()
+
+    def update_edge_cost(self, agent1, agent2, cost):
+        k1 = agent1
+        k2 = agent2
+        if agent2 < k1:
+            k1 = agent2
+            k2 = agent1
+        self.edge_cost_per_agent[f'{k1}-{k2}'] = cost
 
     def to_csv(self, path):
-        df = pd.DataFrame({
-            'event': list(self.cost.keys()),
-            'type': [evt.split(':')[0] for evt in self.cost.keys()],
-            'cost': list(self.cost.values()),
-            'message_count': list(self.message_count.values()),
-        })
-        df.to_csv(path, index=False)
+        if self.can_save:
+            df = pd.DataFrame({
+                'event': list(self.cost.keys()),
+                'type': [evt.split(':')[0] for evt in self.cost.keys()],
+                'num_agents': list(self.num_agents_per_event.values()),
+                'node_cost': list(self.cost.values()),
+                'edge_cost': list(self.edge_cost_per_event.values()),
+                'message_count': list(self.message_count.values()),
+                'num_changes': list(self.num_changes_per_event.values()),
+
+                # dynamic graph stats
+                'announce_msg_count': list(self.announce_msg_count.values()),
+                'announce_res_msg_count': list(self.announce_res_msg_count.values()),
+                'announce_resp_msg_ack_count': list(self.announce_resp_msg_ack_count.values()),
+                'set_network_count': list(self.set_network_count.values()),
+                'ping_msg_count': list(self.ping_msg_count.values()),
+                'ping_msg_resp_count': list(self.ping_msg_resp_count.values()),
+                'network_update_comp_count': list(self.network_update_comp_count.values()),
+                'constraint_changed_count': list(self.constraint_changed_count.values()),
+                'disconnection_msg_count': list(self.disconnection_msg_count.values()),
+            })
+            df.to_csv(path, index=False)
+
+    def get_agent_value(self, agent_id):
+        if agent_id in agents:
+            return agents[agent_id].value
+        else:
+            return None
 
 
 directory = {
