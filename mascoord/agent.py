@@ -1,6 +1,8 @@
 import datetime
 import functools
 import json
+import math
+import queue
 import random
 import time
 from traceback import print_exception
@@ -21,7 +23,7 @@ def parse_amqp_body(body):
     return eval(body.decode('utf-8').replace('true', 'True').replace('false', 'False').replace('null', 'None'))
 
 
-def create_on_message(log, agent_id, handle_message, agent_snapshot):
+def create_on_message(log, agent_id, message_queue, handle_message, agent_snapshot):
     def on_message(ch, method, properties, body):
         payload = parse_amqp_body(body)
 
@@ -29,14 +31,16 @@ def create_on_message(log, agent_id, handle_message, agent_snapshot):
         if 'agent_id' in payload['payload'] and payload['payload']['agent_id'] == agent_id:
             return
 
+        message_queue.put(payload)
+
         log.debug(f'from agent.on_message: received {payload}')
 
         # run agent ops on payload
-        try:
-            handle_message(payload)
-        except Exception as e:
-            log.info(f'Agent snapshot: {agent_snapshot()}\nPayload: {payload}')
-            print_exception(e)
+        # try:
+        #     handle_message(payload)
+        # except Exception as e:
+        #     log.info(f'Agent snapshot: {agent_snapshot()}\nPayload: {payload}')
+        #     print_exception(e)
 
     return on_message
 
@@ -54,6 +58,8 @@ def change_constraint_callback(dyna_graph, coefficients, neighbor_id):
 class Agent:
 
     def __init__(self, agent_id, dcop_algorithm, *args, **kwargs):
+        self.message_queue = queue.Queue()
+
         # agent props
         self.agent_id = agent_id
         self.log = logger.get_logger(agent_id, prefix='Agent')
@@ -62,6 +68,11 @@ class Agent:
         self.coefficients_dict = kwargs['coefficients_dict'] if 'coefficients_dict' in kwargs else {}
         self.metrics = kwargs['metrics']
         self.shared_config = kwargs['shared_config']
+
+        # control announce calls with exponential decay
+        self.initial_rate = .4
+        self.num_connect_calls = 0
+        self.decay_rate = 0.2
 
         self.is_client_asleep = False
 
@@ -105,6 +116,7 @@ class Agent:
         self.channel.basic_consume(queue=self.queue,
                                    on_message_callback=create_on_message(self.log,
                                                                          self.agent_id,
+                                                                         self.message_queue,
                                                                          self.handle_message,
                                                                          self.agent_snapshot),
                                    auto_ack=True)
@@ -288,6 +300,7 @@ class Agent:
         self.dcop.set_edge_costs()
 
     def handle_message(self, payload):
+        # self.log.info(f'Received payload: {payload}')
         message_type = payload['type']
 
         # connection message handling
@@ -331,10 +344,14 @@ class Agent:
             self.increment_messages_count()
             self.constraint_changed_count += 1
 
-        elif message_type == messaging.DISCONNECTION_MESSAGE:
-            self.graph.receive_disconnection_message(payload)
+        elif message_type == messaging.CONNECTION_STATUS:
+            self.graph.receive_connection_status_message(payload)
             self.increment_messages_count()
-            self.disconnection_msg_count += 1
+
+        # elif message_type == messaging.DISCONNECTION_MESSAGE:
+        #     self.graph.receive_disconnection_message(payload)
+        #     self.increment_messages_count()
+        #     self.disconnection_msg_count += 1
 
         # C-CoCoA message handling
         elif message_type == messaging.UPDATE_STATE_MESSAGE:
@@ -383,23 +400,25 @@ class Agent:
         count = config.CONNECT_CALL_DELAY_COUNT
 
         while not self.terminate:
-            if count == config.CONNECT_CALL_DELAY_COUNT:
-                self.graph.connect()
-                count = 0
-            count += 1
+            self.client.sleep(0)
 
-            # process network events
-            self.listen_to_network()
+            try:
+                message = self.message_queue.get(block=False)
+            except queue.Empty:
+                message = None
+            if message:
+                self.handle_message(message)
+
+            if random.random() < self.connect_exp_decay():
+                self.graph.connect()
+                self.num_connect_calls += 1
 
             self.dcop.resolve_value()
 
             # check if neighbors should be pinged
             if not last_ping_call_time or datetime.datetime.now() > last_ping_call_time \
                     + datetime.timedelta(seconds=config.PING_PROC_CALL_DELAY_IN_SECONDS):
-                self.graph.ping_neighbors()
-
-                # process network (ping) events
-                self.listen_to_network()
+                # self.graph.ping_neighbors()
 
                 last_ping_call_time = datetime.datetime.now()
 
@@ -451,6 +470,10 @@ class Agent:
                 'utf-8'
             )
         )
+
+    def connect_exp_decay(self):
+        rate = self.initial_rate * math.exp(-self.decay_rate * self.num_connect_calls)
+        return rate
 
     def __str__(self) -> str:
         return self.agent_id

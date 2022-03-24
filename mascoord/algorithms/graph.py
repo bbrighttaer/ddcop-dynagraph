@@ -84,6 +84,7 @@ class DynaGraph:
                     self.network = ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
                     self.agent.cpa.clear()
                     self.on_network_changed()
+                    self.agent.num_connect_calls = 0
                 else:
                     self.children.remove(agent)
 
@@ -129,8 +130,6 @@ class DynaGraph:
                                        }))
 
     def receive_announce_message(self, payload):
-        self.log.debug(f'received {payload}')
-
         data = payload['payload']
         sender = data['agent_id']
         sender_network = data['network']
@@ -161,8 +160,6 @@ class DynaGraph:
                                            }))
 
     def receive_announce_response_message(self, payload):
-        self.log.debug(f'received {payload}')
-
         data = payload['payload']
         sender = data['agent_id']
         network = data['network']
@@ -171,31 +168,102 @@ class DynaGraph:
         key = f'{sender},{self.agent.agent_id}'
         use_predefined_graph = self.agent.shared_config.use_predefined_graph
 
-        if not self.busy and not self.parent \
+        if not self.busy \
+                and not self.parent \
                 and not self.is_neighbor(sender) \
                 and sender not in self.responses \
                 and self.network != network \
                 and ((use_predefined_graph and key in self.agent.coefficients_dict) or not use_predefined_graph):
             self.busy = True
+            self.log.error(f'received {payload}')
 
             self.log.debug('receive_announce_response_message' + str(self.responses))
-
-            constraint = self.agent.get_constraint(sender)
-            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
             self.parent = sender
-            previous_network = self.network
-            self.network = network
-            self.on_network_changed()
-            self.agent.connection_extra_args_callback(sender, extra_args)
 
             # send acknowledgement to sender
             self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                        routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
                                        body=messaging.create_announce_response_message_ack({
                                            'agent_id': self.agent.agent_id,
+                                           'network': self.network,
                                            'connected': True,
                                            'extra_args': self.agent.connection_extra_args,
                                        }))
+
+        else:
+            # respond if connection is not possible
+            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
+                                       body=messaging.create_announce_response_message_ack({
+                                           'agent_id': self.agent.agent_id,
+                                           'connected': False,
+                                       }))
+
+    def receive_announce_response_message_ack(self, payload):
+        data = payload['payload']
+        sender = data['agent_id']
+        connected = data['connected']
+
+        if connected and not self.is_neighbor(sender) and self.network != data['network']:
+            self.log.error(f'my network {self.network}, sender {sender} network {data["network"]}')
+            constraint = self.agent.get_constraint(sender)
+            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
+            self.children.append(sender)
+            self.children_history[sender] = constraint
+            extra_args = data['extra_args']
+            self.agent.connection_extra_args_callback(sender, extra_args)
+
+            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
+                                       body=messaging.create_connection_status_message({
+                                           'agent_id': self.agent.agent_id,
+                                           'status': True,
+                                           'network': self.network,
+                                           'extra_args': self.agent.connection_extra_args,
+                                       }))
+
+            # inform dashboard about connection
+            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                       routing_key=f'{messaging.MONITORING_CHANNEL}',
+                                       body=messaging.create_agent_connection_message({
+                                           'agent_id': self.agent.agent_id,
+                                           'parent': self.agent.agent_id,
+                                           'child': sender,
+                                           'constraint': str(constraint.equation),
+                                           'route': messaging.ANNOUNCE_RESPONSE_MSG_ACK,
+                                           'network': self.network,
+                                       }))
+
+            self.log.error(f'parent = {self.parent}, children = {self.children}')
+
+            if self.agent.graph_traversing_order == 'top-down':
+                self.reset()
+        elif connected:
+            # respond if connection is not possible and cannot be confirmed
+            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
+                                       body=messaging.create_connection_status_message({
+                                           'agent_id': self.agent.agent_id,
+                                           'status': False,
+                                       }))
+
+        # announce cycle is complete so remove this sender to allow future connections
+        self.responses.remove(sender)
+        self.busy = False
+
+    def receive_connection_status_message(self, payload):
+        data = payload['payload']
+        sender = data['agent_id']
+        status = data['status']
+
+        if status:
+            self.log.error(f'received con status {payload}')
+            constraint = self.agent.get_constraint(sender)
+            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
+            previous_network = self.network
+            self.network = data['network']
+            self.on_network_changed()
+            self.agent.connection_extra_args_callback(sender, data['extra_args'])
 
             # inform dashboard about connection
             self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
@@ -210,58 +278,15 @@ class DynaGraph:
                                            'previous': previous_network,
                                        }))
 
-            self.log.info(f'parent = {self.parent}, children = {self.children}')
+            self.log.error(f'parent = {self.parent}, children = {self.children}')
 
             if not self.children:
                 self.busy = False
 
             if self.agent.graph_traversing_order == 'bottom-up':
                 self.reset()
-
-        else:
-            # respond if connection is not possible
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                       body=messaging.create_announce_response_message_ack({
-                                           'agent_id': self.agent.agent_id,
-                                           'connected': False,
-                                       }))
-
-    def receive_announce_response_message_ack(self, payload):
-        self.log.debug(f'received {payload}')
-
-        data = payload['payload']
-        sender = data['agent_id']
-        connected = data['connected']
-
-        if connected and not self.is_neighbor(sender):
-            constraint = self.agent.get_constraint(sender)
-            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
-            self.children.append(sender)
-            self.children_history[sender] = constraint
-            extra_args = data['extra_args']
-            self.agent.connection_extra_args_callback(sender, extra_args)
-
-            # inform dashboard about connection
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                       body=messaging.create_agent_connection_message({
-                                           'agent_id': self.agent.agent_id,
-                                           'parent': self.agent.agent_id,
-                                           'child': sender,
-                                           'constraint': str(constraint.equation),
-                                           'route': messaging.ANNOUNCE_RESPONSE_MSG_ACK,
-                                           'network': self.network,
-                                       }))
-
-            self.log.info(f'parent = {self.parent}, children = {self.children}')
-
-            if self.agent.graph_traversing_order == 'top-down':
-                self.reset()
-
-        # announce cycle is complete so remove this sender to allow future connections
-        self.responses.remove(sender)
-        self.busy = False
+        elif self.parent == sender:
+            self.parent = None
 
     def receive_set_network_message(self, payload):
         data = payload['payload']
@@ -269,27 +294,29 @@ class DynaGraph:
         sender = data['agent_id']
         thread_id = data['thread_id']
 
-        if thread_id == self.agent.agent_id:
-            self.log.info(f'Disconnecting from agent {sender}')
-            self.disconnect_neighbor(sender)
+        # if thread_id == self.agent.agent_id:
+        #     self.log.info(f'Disconnecting from agent {sender}')
+        #     self.disconnect_neighbor(sender)
+        #     self.send_disconnection_message(sender)
+        # else:
+        self.network = network
+        self.on_network_changed(thread_id)
 
-            # send a disconnection message to sender
+        if not self.children:
             self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                       body=messaging.create_disconnection_message({
+                                       routing_key=f'{messaging.AGENTS_CHANNEL}.public',
+                                       body=messaging.create_network_update_completion({
                                            'agent_id': self.agent.agent_id,
+                                           'network': self.network,
                                        }))
-        else:
-            self.network = network
-            self.on_network_changed(thread_id)
 
-            if not self.children:
-                self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                           routing_key=f'{messaging.AGENTS_CHANNEL}.public',
-                                           body=messaging.create_network_update_completion({
-                                               'agent_id': self.agent.agent_id,
-                                               'network': self.network,
-                                           }))
+    def send_disconnection_message(self, sender):
+        # send a disconnection message to sender
+        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                   routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
+                                   body=messaging.create_disconnection_message({
+                                       'agent_id': self.agent.agent_id,
+                                   }))
 
     def receive_disconnection_message(self, payload):
         self.log.info(f'Received disconnection message {payload}')

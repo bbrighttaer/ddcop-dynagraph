@@ -21,7 +21,7 @@ def get_logger(name, prefix=None):
 
         # create handlers
         c_handler = logging.StreamHandler()
-        f_handler = logging.FileHandler(f'logs/{name}.log')
+        f_handler = logging.FileHandler(f'logs/{name}.log', mode='w')
         c_handler.setLevel(logging.DEBUG)
         f_handler.setLevel(logging.ERROR)
 

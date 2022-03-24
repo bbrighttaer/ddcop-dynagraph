@@ -95,14 +95,13 @@ class Runner:
     def execute_graph_gen(self):
         log.info('Executing graph gen')
 
-        for _ in range(self.exec_args.num_agents):
-            handlers.add_agent_handler({'num_agents': 1})
+        handlers.add_agent_handler({'num_agents': self.exec_args.num_agents})
 
-        for _ in range(self.exec_args.num_const_change):
-            handlers.change_constraint_handler({'num_agents': 1})
+        time.sleep(60)
 
-        for _ in range(self.exec_args.num_remove):
-            handlers.remove_agent_handler({'num_agents': 1})
+        # handlers.change_constraint_handler({'num_agents': self.exec_args.num_const_change})
+        #
+        # handlers.remove_agent_handler({'num_agents': self.exec_args.num_remove})
 
     def execute_sim_from_files(self, sim_file):
         log.info(f'Executing from sim files, using predefined network: {config.shared_config.use_predefined_graph}')
@@ -200,6 +199,7 @@ if __name__ == '__main__':
     handlers.set_domain_size(args.domain_size)
 
     command = args.command
+    config.shared_config.execution_mode = command
     if command == 'graph-gen':
         handlers.set_dcop_algorithm('no-dcop')
         config.shared_config.use_predefined_graph = False

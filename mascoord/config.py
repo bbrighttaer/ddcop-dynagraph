@@ -22,6 +22,7 @@ class SharedConfig:
     def __init__(self):
         self.use_predefined_graph = False
         self.max_out_degree = float('inf')
+        self.execution_mode = None
 
 
 shared_config = SharedConfig()

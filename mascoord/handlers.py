@@ -118,10 +118,11 @@ def add_agent_handler(msg):
 
             _spawn_agent(agent_id)
 
-            time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
+            if not is_graph_gen():
+                time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
     else:
         for i in range(num_agents):
-            agent_id = len(agents)
+            agent_id = i if is_graph_gen() else len(agents)
             evt = f'{ADD_AGENT}:{agent_id}'
             commands.append(evt)
 
@@ -130,13 +131,18 @@ def add_agent_handler(msg):
 
             _spawn_agent(agent_id=agent_id)
 
-            time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
+            if not is_graph_gen():
+                time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
 
     # time.sleep(2)
     # client.publish(f'{messaging.FACTORY_COMMAND_CHANNEL}/',
     #                messaging.create_test_message({
     #                    'msg': 'this is a test message from factory',
     #                }))
+
+
+def is_graph_gen():
+    return config.shared_config.execution_mode == 'graph-gen'
 
 
 def _spawn_agent(agent_id):
