@@ -1,11 +1,7 @@
-import collections
-import random
-import string
+import enum
 
 from mascoord import messaging
 from mascoord.config import MAX_PING_COUNT
-
-import enum
 
 
 class State(enum.Enum):
@@ -53,6 +49,7 @@ class DynaGraph:
 
     def _start_dcop(self):
         self.log.debug(f'Starting DCOP...')
+        self.agent.execute_dcop()
 
     def _send_to_agent(self, body, to):
         self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
@@ -123,9 +120,13 @@ class DynaGraph:
         self.log.debug(f'Received AddMe: {message}')
         sender = message['payload']['agent_id']
 
-        if self.state == State.INACTIVE:
+        key = f'{self.agent.agent_id},{sender}'
+        using_saved_sim = self.agent.shared_config.use_predefined_graph
+
+        if self.state == State.INACTIVE \
+                and ((using_saved_sim and key in self.agent.coefficients_dict) or not using_saved_sim):
             constraint = self.agent.get_constraint(sender)
-            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
+            self.agent.active_constraints[key] = constraint
             self.children.append(sender)
             self.children_history[sender] = constraint
             self._send_to_agent(
