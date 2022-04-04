@@ -7,7 +7,6 @@ import random
 import time
 from traceback import print_exception
 
-import pandas as pd
 import pika
 
 import config
@@ -81,13 +80,13 @@ class Agent:
         # dynamic graph stats
         self.announce_msg_count = 0
         self.announce_res_msg_count = 0
-        self.announce_resp_msg_ack_count = 0
-        self.set_network_count = 0
+        self.add_me_count = 0
+        self.child_added_count = 0
+        self.parent_assigned_count = 0
+        self.already_active_count = 0
         self.ping_msg_count = 0
         self.ping_msg_resp_count = 0
-        self.network_update_comp_count = 0
         self.constraint_changed_count = 0
-        self.disconnection_msg_count = 0
 
         self.client = pika.BlockingConnection(
             pika.ConnectionParameters(
@@ -227,20 +226,6 @@ class Agent:
     def _time_lapse(self):
         self.accum_time = time_diff(self.start_time)
 
-    # def dcop_done(self):
-    #     self.metrics_dict[self.agent_id] = {
-    #         'time': self.accum_time,
-    #         'cost': float(self.cost),
-    #         'num_messages': self.messages_count,
-    #     }
-    #     self.log.info('DCOP done')
-    #
-    #     # reset for next computation
-    #     self.clear_messages_count()
-    #     self.clear_cost()
-    #     self._start_time()
-    #     self.accum_time = 0
-
     def agent_snapshot(self):
         snapshot = {
             'agent_id': self.agent_id,
@@ -310,20 +295,28 @@ class Agent:
 
             case messaging.ANNOUNCE_RESPONSE:
                 self.graph.receive_announce_response(message)
-                self.increment_messages_count()
+                # self.increment_messages_count()
                 self.announce_res_msg_count += 1
 
             case messaging.ADD_ME:
                 self.graph.receive_add_me(message)
+                self.increment_messages_count()
+                self.add_me_count += 1
 
             case messaging.CHILD_ADDED:
                 self.graph.receive_child_added(message)
+                self.increment_messages_count()
+                self.child_added_count += 1
 
             case messaging.PARENT_ASSIGNED:
                 self.graph.receive_parent_assigned(message)
+                self.increment_messages_count()
+                self.parent_assigned_count += 1
 
             case messaging.ALREADY_ACTIVE:
                 self.graph.receive_already_active(message)
+                self.increment_messages_count()
+                self.already_active_count += 1
 
             case messaging.PING:
                 self.graph.receive_ping_message(message)
@@ -340,32 +333,34 @@ class Agent:
                 self.increment_messages_count()
                 self.constraint_changed_count += 1
 
+            # C-CoCoA message handling
+            case messaging.UPDATE_STATE_MESSAGE:
+                self.dcop.receive_update_state_message(message)
+                self.increment_messages_count()
+
+            case messaging.INQUIRY_MESSAGE:
+                self.dcop.receive_inquiry_message(message)
+                self.increment_messages_count()
+
+            case messaging.COST_MESSAGE:
+                self.dcop.receive_cost_message(message)
+                self.increment_messages_count()
+
+            # SDPOP/C-SDPOP message handling
+            case messaging.VALUE_MESSAGE:
+                self.dcop.receive_value_message(message)
+                self.increment_messages_count()
+
+            case messaging.UTIL_MESSAGE:
+                self.dcop.receive_util_message(message)
+                self.increment_messages_count()
+
+            case messaging.REQUEST_UTIL_MESSAGE:
+                self.dcop.receive_util_message_request(message)
+                self.increment_messages_count()
+
             case _:
                 self.log.info(f'Could not handle received payload: {message}')
-
-        # C-CoCoA message handling
-        # elif message_type == messaging.UPDATE_STATE_MESSAGE:
-        #     self.dcop.receive_update_state_message(payload)
-        #     self.increment_messages_count()
-        #
-        # elif message_type == messaging.INQUIRY_MESSAGE:
-        #     self.dcop.receive_inquiry_message(payload)
-        #     self.increment_messages_count()
-        #
-        # elif message_type == messaging.COST_MESSAGE:
-        #     self.dcop.receive_cost_message(payload)
-        #     self.increment_messages_count()
-
-        # SDPOP/C-SDPOP message handling
-        # elif message_type == messaging.VALUE_MESSAGE:
-        #     self.dcop.receive_value_message(payload)
-        #     self.increment_messages_count()
-        # elif message_type == messaging.UTIL_MESSAGE:
-        #     self.dcop.receive_util_message(payload)
-        #     self.increment_messages_count()
-        # elif message_type == messaging.REQUEST_UTIL_MESSAGE:
-        #     self.dcop.receive_util_message_request(payload)
-        #     self.increment_messages_count()
 
     def __call__(self, *args, **kwargs):
         self.log.info('Initializing...')
@@ -446,11 +441,3 @@ class Agent:
     def __str__(self) -> str:
         return self.agent_id
 
-
-def create_metrics_on_message(metrics):
-    def on_message(ch, method, properties, body):
-        body = parse_amqp_body(body)
-        metrics.log.info(body)
-        metrics.record_agent_stats(body['payload'])
-
-    return on_message
