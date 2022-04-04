@@ -14,7 +14,6 @@ PING_PROC_CALL_DELAY_IN_SECONDS = int(os.environ['PING_PROC_CALL_DELAY_IN_SECOND
 MAX_PING_COUNT = int(os.environ['MAX_PING_COUNT'])
 PIKA_USERNAME = os.environ['PIKA_USERNAME']
 PIKA_PASSWORD = os.environ['PIKA_PASSWORD']
-CONNECT_CALL_DELAY_COUNT = int(os.environ['CONNECT_CALL_DELAY_COUNT'])
 
 
 class SharedConfig:
@@ -22,6 +21,7 @@ class SharedConfig:
     def __init__(self):
         self.use_predefined_graph = False
         self.max_out_degree = float('inf')
+        self.execution_mode = None
 
 
 shared_config = SharedConfig()
