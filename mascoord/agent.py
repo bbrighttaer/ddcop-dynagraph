@@ -25,22 +25,22 @@ def parse_amqp_body(body):
 
 def create_on_message(log, agent_id, message_queue, handle_message, agent_snapshot):
     def on_message(ch, method, properties, body):
-        payload = parse_amqp_body(body)
+        message = parse_amqp_body(body)
 
         # avoid own messages (no local is not supported ATM, see https://www.rabbitmq.com/specification.html)
-        if 'agent_id' in payload['payload'] and payload['payload']['agent_id'] == agent_id:
+        if 'agent_id' in message['payload'] and message['payload']['agent_id'] == agent_id:
             return
 
-        message_queue.put(payload)
+        # message_queue.put(payload)
 
-        log.debug(f'from agent.on_message: received {payload}')
+        # log.debug(f'from agent.on_message: received {message}')
 
         # run agent ops on payload
-        # try:
-        #     handle_message(payload)
-        # except Exception as e:
-        #     log.info(f'Agent snapshot: {agent_snapshot()}\nPayload: {payload}')
-        #     print_exception(e)
+        try:
+            handle_message(message)
+        except Exception as e:
+            log.info(f'Agent snapshot: {agent_snapshot()}\nPayload: {message}')
+            print_exception(e)
 
     return on_message
 
@@ -72,7 +72,7 @@ class Agent:
         # control announce calls with exponential decay
         self.initial_rate = .4
         self.num_connect_calls = 0
-        self.decay_rate = 0.2
+        self.decay_rate = 0.1
 
         self.is_client_asleep = False
 
@@ -96,6 +96,7 @@ class Agent:
             pika.ConnectionParameters(
                 host=config.BROKER_URL,
                 port=config.BROKER_PORT,
+                heartbeat=0,  # only for experiment purposes - see (https://www.rabbitmq.com/heartbeats.html)
                 credentials=pika.credentials.PlainCredentials(config.PIKA_USERNAME, config.PIKA_PASSWORD)
             ))
         self.channel = self.client.channel()
@@ -241,16 +242,13 @@ class Agent:
         snapshot = {
             'agent_id': self.agent_id,
             'domain': self.domain,
-            'network': self.graph.network,
             'constraints': {k: str(v) for k, v in self.active_constraints.items()},
             'cpa': self.cpa,
             'state': self.state,
             'cost': self.cost,
             'parent': self.parent,
             'pinged_list': self.graph.pinged_list_dict,
-            'responses': list(self.graph.responses),
             'value': self.dcop.value,
-            'busy': self.graph.busy,
         }
         if self.dcop.name == 'c-cocoa':
             snapshot.update({
@@ -299,95 +297,72 @@ class Agent:
     def set_edge_costs(self):
         self.dcop.set_edge_costs()
 
-    def handle_message(self, payload):
-        # self.log.info(f'Received payload: {payload}')
-        message_type = payload['type']
+    def handle_message(self, message):
 
-        # connection message handling
-        if message_type == messaging.ANNOUNCE_MSG:
-            self.graph.receive_announce_message(payload)
-            # self.increment_messages_count()
-            self.announce_msg_count += 1
+        match message['type']:
+            case messaging.ANNOUNCE:
+                self.graph.receive_announce(message)
+                # self.increment_messages_count()
+                self.announce_msg_count += 1
 
-        elif message_type == messaging.ANNOUNCE_RESPONSE_MSG:
-            self.graph.receive_announce_response_message(payload)
-            self.increment_messages_count()
-            self.announce_res_msg_count += 1
+            case messaging.ANNOUNCE_RESPONSE:
+                self.graph.receive_announce_response(message)
+                self.increment_messages_count()
+                self.announce_res_msg_count += 1
 
-        elif message_type == messaging.ANNOUNCE_RESPONSE_MSG_ACK:
-            self.graph.receive_announce_response_message_ack(payload)
-            self.increment_messages_count()
-            self.announce_resp_msg_ack_count += 1
+            case messaging.ADD_ME:
+                self.graph.receive_add_me(message)
 
-        elif message_type == messaging.SET_NETWORK:
-            self.graph.receive_set_network_message(payload)
-            self.increment_messages_count()
-            self.set_network_count += 1
+            case messaging.CHILD_ADDED:
+                self.graph.receive_child_added(message)
 
-        elif message_type == messaging.PING_MESSAGE:
-            self.graph.receive_ping_message(payload)
-            # self.increment_messages_count()
-            self.ping_msg_count += 1
+            case messaging.PARENT_ASSIGNED:
+                self.graph.receive_parent_assigned(message)
 
-        elif message_type == messaging.PING_RESPONSE_MESSAGE:
-            self.graph.receive_ping_response_message(payload)
-            # self.increment_messages_count()
-            self.ping_msg_resp_count += 1
+            case messaging.ALREADY_ACTIVE:
+                self.graph.receive_already_active(message)
 
-        elif message_type == messaging.NETWORK_UPDATE_COMPLETION:
-            self.graph.receive_network_update_completion_message(payload)
-            self.increment_messages_count()
-            self.network_update_comp_count += 1
+            case _:
+                self.log.info(f'Could not handle received payload: {message}')
 
-        elif message_type == messaging.CONSTRAINT_CHANGED:
-            self.graph.receive_constraint_changed_message(payload)
-            self.increment_messages_count()
-            self.constraint_changed_count += 1
+        # elif message_type == messaging.PING_MESSAGE:
+        #     self.graph.receive_ping_message(payload)
+        #     # self.increment_messages_count()
+        #     self.ping_msg_count += 1
 
-        elif message_type == messaging.CONNECTION_STATUS:
-            self.graph.receive_connection_status_message(payload)
-            self.increment_messages_count()
+        # elif message_type == messaging.PING_RESPONSE_MESSAGE:
+        #     self.graph.receive_ping_response_message(payload)
+        #     # self.increment_messages_count()
+        #     self.ping_msg_resp_count += 1
 
-        # elif message_type == messaging.DISCONNECTION_MESSAGE:
-        #     self.graph.receive_disconnection_message(payload)
+        # elif message_type == messaging.CONSTRAINT_CHANGED:
+        #     self.graph.receive_constraint_changed_message(payload)
         #     self.increment_messages_count()
-        #     self.disconnection_msg_count += 1
+        #     self.constraint_changed_count += 1
 
         # C-CoCoA message handling
-        elif message_type == messaging.UPDATE_STATE_MESSAGE:
-            self.dcop.receive_update_state_message(payload)
-            self.increment_messages_count()
-
-        elif message_type == messaging.INQUIRY_MESSAGE:
-            self.dcop.receive_inquiry_message(payload)
-            self.increment_messages_count()
-
-        elif message_type == messaging.COST_MESSAGE:
-            self.dcop.receive_cost_message(payload)
-            self.increment_messages_count()
+        # elif message_type == messaging.UPDATE_STATE_MESSAGE:
+        #     self.dcop.receive_update_state_message(payload)
+        #     self.increment_messages_count()
+        #
+        # elif message_type == messaging.INQUIRY_MESSAGE:
+        #     self.dcop.receive_inquiry_message(payload)
+        #     self.increment_messages_count()
+        #
+        # elif message_type == messaging.COST_MESSAGE:
+        #     self.dcop.receive_cost_message(payload)
+        #     self.increment_messages_count()
 
         # SDPOP message handling
-        elif message_type == messaging.VALUE_MESSAGE:
-            self.dcop.receive_value_message(payload)
-            self.increment_messages_count()
-        elif message_type == messaging.UTIL_MESSAGE:
-            self.dcop.receive_util_message(payload)
-            self.increment_messages_count()
-        elif message_type == messaging.REQUEST_UTIL_MESSAGE:
-            self.dcop.receive_util_message_request(payload)
-            self.increment_messages_count()
-
-        # elif message_type == messaging.AGENT_RESET:
-        #     self.dcop.reset(payload=payload)
-
-        # elif message_type == messaging.NEIGHBOR_STATE_REQUEST:
-        #     self.dcop.receive_state_request(payload)
-        #
-        # elif message_type == messaging.NEIGHBOR_STATE_REQUEST_RESPONSE:
-        #     self.dcop.receive_state_request_response(payload)
-
-        else:
-            self.log.info(f'Could not handle received payload: {payload}')
+        # elif message_type == messaging.VALUE_MESSAGE:
+        #     self.dcop.receive_value_message(payload)
+        #     self.increment_messages_count()
+        # elif message_type == messaging.UTIL_MESSAGE:
+        #     self.dcop.receive_util_message(payload)
+        #     self.increment_messages_count()
+        # elif message_type == messaging.REQUEST_UTIL_MESSAGE:
+        #     self.dcop.receive_util_message_request(payload)
+        #     self.increment_messages_count()
 
     def __call__(self, *args, **kwargs):
         self.log.info('Initializing...')
@@ -397,17 +372,8 @@ class Agent:
 
         last_ping_call_time = None
 
-        count = config.CONNECT_CALL_DELAY_COUNT
-
         while not self.terminate:
-            self.client.sleep(0)
-
-            try:
-                message = self.message_queue.get(block=False)
-            except queue.Empty:
-                message = None
-            if message:
-                self.handle_message(message)
+            self.listen_to_network()
 
             if random.random() < self.connect_exp_decay():
                 self.graph.connect()

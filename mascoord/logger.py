@@ -1,7 +1,7 @@
 import os
 import logging
 
-LOGGING_LEVEL = logging.INFO
+LOGGING_LEVEL = logging.DEBUG
 
 created_loggers = {}
 
@@ -23,7 +23,7 @@ def get_logger(name, prefix=None):
         c_handler = logging.StreamHandler()
         f_handler = logging.FileHandler(f'logs/{name}.log', mode='w')
         c_handler.setLevel(logging.DEBUG)
-        f_handler.setLevel(logging.ERROR)
+        f_handler.setLevel(logging.INFO)
 
         # create formatters
         c_format = logging.Formatter(f'[%(asctime)s] {prefix}%(name)s - %(levelname)s - %(message)s')

@@ -5,6 +5,13 @@ import string
 from mascoord import messaging
 from mascoord.config import MAX_PING_COUNT
 
+import enum
+
+
+class State(enum.Enum):
+    ACTIVE = enum.auto()
+    INACTIVE = enum.auto()
+
 
 class DynaGraph:
     """
@@ -19,11 +26,9 @@ class DynaGraph:
         self.children_history = {}
         self.log = self.agent.log
         self.client = agent.client
-        self.responses = collections.deque()
-        self.network = ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
         self.pinged_list_dict = {}
-        self.busy = False
-        self.can_pub_connect = True
+        self.state = State.INACTIVE
+        self.announceResponseList = []
 
     def has_no_neighbors(self):
         return not self.parent and not self.children
@@ -46,375 +51,127 @@ class DynaGraph:
             neighbors.append(self.parent)
         return neighbors
 
-    def on_network_changed(self, thread_id=None):
-        for child in self.children:
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{child}',
-                                       body=messaging.create_set_network_message({
-                                           'agent_id': self.agent.agent_id,
-                                           'network': self.network,
-                                           'thread_id': thread_id or self.agent.agent_id,
-                                       }))
-        # self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-        #                            routing_key=f'{messaging.MONITORING_CHANNEL}',
-        #                            body=messaging.create_set_network_message({
-        #                                'agent_id': self.agent.agent_id,
-        #                                'network': self.network,
-        #                            }))
+    def _start_dcop(self):
+        self.log.debug(f'Starting DCOP...')
 
-    def remove_inactive_connections(self):
-        """remove agents that are still in the pinged list"""
-        disconnected = False
+    def _send_to_agent(self, body, to):
+        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                   routing_key=f'{messaging.AGENTS_CHANNEL}.{to}',
+                                   body=body)
 
-        temp_list = list(self.pinged_list_dict.keys())
-
-        for agent in temp_list:
-            if self.pinged_list_dict[agent] >= MAX_PING_COUNT:
-                # remove constraint
-                self.agent.active_constraints.pop(f'{self.agent.agent_id},{agent}')
-
-                # remove from responses
-                if agent in self.responses:
-                    self.responses.remove(agent)
-
-                # remove from neighbor list
-                if self.parent == agent:
-                    self.busy = True
-                    self.parent = None
-                    self.network = ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
-                    self.agent.cpa.clear()
-                    self.on_network_changed()
-                    self.agent.num_connect_calls = 0
-                else:
-                    self.children.remove(agent)
-
-                disconnected = True
-                self.agent.agent_disconnection_callback(agent)
-                self.report_agent_disconnection(agent)
-                self.pinged_list_dict.pop(agent)
-
-        if disconnected:
-            self.reset()
-
-    def report_agent_disconnection(self, agent):
-        # inform dashboard of disconnection
+    def _report_connection(self, parent, child, constraint):
         self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                    routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                   body=messaging.create_agent_disconnection_message({
+                                   body=messaging.create_agent_connection_message({
                                        'agent_id': self.agent.agent_id,
-                                       'node1': self.agent.agent_id,
-                                       'node2': agent,
-                                       'network': self.network,
+                                       'child': child,
+                                       'parent': parent,
+                                       'constraint': str(constraint),
                                    }))
 
-    def reset(self):
-        # Run DCOP algorithm
-        self.agent.execute_dcop()
-
-        if not self.children:
-            self.busy = False
-            # self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-            #                            routing_key=f'{messaging.AGENTS_CHANNEL}.public',
-            #                            body=messaging.create_network_update_completion({
-            #                                'agent_id': self.agent.agent_id,
-            #                                'network': self.network,
-            #                            }))
-
     def connect(self):
-        if not self.parent:
+        if self.state == State.INACTIVE and not self.parent:
+            self.log.debug(f'Publishing Announce message...')
+
+            # publish Announce message
             self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                        routing_key=f'{messaging.AGENTS_CHANNEL}.public',
                                        body=messaging.create_announce_message({
                                            'agent_id': self.agent.agent_id,
-                                           'network': self.network,
                                        }))
 
-    def receive_announce_message(self, payload):
-        data = payload['payload']
-        sender = data['agent_id']
-        sender_network = data['network']
-        max_out_degree = self.agent.shared_config.max_out_degree
+            # wait to receive responses
+            self.agent.listen_to_network()
 
-        if self.network != sender_network and not self.busy and len(self.children) < max_out_degree:
-            self.busy = True
-            if self.agent.shared_config.use_predefined_graph:
-                key = f'{self.agent.agent_id},{sender}'
-                if key in self.agent.coefficients_dict:
-                    self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                               routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                               body=messaging.create_announce_response_message({
-                                                   'agent_id': self.agent.agent_id,
-                                                   'network': self.network,
-                                                   'extra_args': self.agent.connection_extra_args,
-                                               }))
-                else:
-                    self.busy = False
-            else:
-                self.responses.append(sender)
-                self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                           routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                           body=messaging.create_announce_response_message({
-                                               'agent_id': self.agent.agent_id,
-                                               'network': self.network,
-                                               'extra_args': self.agent.connection_extra_args,
-                                           }))
+            self.log.debug(f'AnnounceResponse list in connect: {self.announceResponseList}')
 
-    def receive_announce_response_message(self, payload):
-        data = payload['payload']
-        sender = data['agent_id']
-        network = data['network']
-        extra_args = data['extra_args']
+            # select agent to connect to
+            selected_agent = None
+            for agent in self.announceResponseList:
+                if agent < int(self.agent.agent_id):
+                    selected_agent = agent
+                    break
+            if selected_agent is not None:
+                self.log.debug(f'Selected agent for AddMe: {selected_agent}')
+                self._send_to_agent(
+                    body=messaging.create_add_me_message({'agent_id': self.agent.agent_id}),
+                    to=selected_agent,
+                )
+                self.state = State.ACTIVE
 
-        key = f'{sender},{self.agent.agent_id}'
-        use_predefined_graph = self.agent.shared_config.use_predefined_graph
+            self.announceResponseList.clear()
 
-        if not self.busy \
-                and not self.parent \
-                and not self.is_neighbor(sender) \
-                and sender not in self.responses \
-                and self.network != network \
-                and ((use_predefined_graph and key in self.agent.coefficients_dict) or not use_predefined_graph):
-            self.busy = True
-            self.log.error(f'received {payload}')
+    def receive_announce(self, message):
+        self.log.debug(f'Received announce: {message}')
+        sender = message['payload']['agent_id']
 
-            self.log.debug('receive_announce_response_message' + str(self.responses))
-            self.parent = sender
+        if self.state == State.INACTIVE and int(self.agent.agent_id) < int(sender):
+            self._send_to_agent(
+                body=messaging.create_announce_response_message({'agent_id': self.agent.agent_id}),
+                to=sender,
+            )
 
-            # send acknowledgement to sender
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                       body=messaging.create_announce_response_message_ack({
-                                           'agent_id': self.agent.agent_id,
-                                           'network': self.network,
-                                           'connected': True,
-                                           'extra_args': self.agent.connection_extra_args,
-                                       }))
+    def receive_announce_response(self, message):
+        self.log.debug(f'Received announce response: {message}')
+        sender = message['payload']['agent_id']
 
-        else:
-            # respond if connection is not possible
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                       body=messaging.create_announce_response_message_ack({
-                                           'agent_id': self.agent.agent_id,
-                                           'connected': False,
-                                       }))
+        if self.state == State.INACTIVE:
+            self.announceResponseList.append(int(sender))
+            self.log.debug(f'AnnounceResponse list: {self.announceResponseList}')
 
-    def receive_announce_response_message_ack(self, payload):
-        data = payload['payload']
-        sender = data['agent_id']
-        connected = data['connected']
+    def receive_add_me(self, message):
+        self.log.debug(f'Received AddMe: {message}')
+        sender = message['payload']['agent_id']
 
-        if connected and not self.is_neighbor(sender) and self.network != data['network']:
-            self.log.error(f'my network {self.network}, sender {sender} network {data["network"]}')
+        if self.state == State.INACTIVE:
             constraint = self.agent.get_constraint(sender)
-            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
             self.children.append(sender)
             self.children_history[sender] = constraint
-            extra_args = data['extra_args']
-            self.agent.connection_extra_args_callback(sender, extra_args)
+            self._send_to_agent(
+                body=messaging.create_child_added_message({
+                    'agent_id': self.agent.agent_id,
+                    'extra_args': self.agent.connection_extra_args,
+                }),
+                to=sender,
+            )
 
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                       body=messaging.create_connection_status_message({
-                                           'agent_id': self.agent.agent_id,
-                                           'status': True,
-                                           'network': self.network,
-                                           'extra_args': self.agent.connection_extra_args,
-                                       }))
+            # inform dashboard about the connection
+            self._report_connection(parent=self.agent.agent_id, child=sender, constraint=constraint)
+        else:
+            self.log.debug(f'Rejected AddMe from agent: {sender}, sending AlreadyActive message')
+            self._send_to_agent(
+                body=messaging.create_already_active_message({'agent_id': self.agent.agent_id}),
+                to=sender,
+            )
 
-            # inform dashboard about connection
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                       body=messaging.create_agent_connection_message({
-                                           'agent_id': self.agent.agent_id,
-                                           'parent': self.agent.agent_id,
-                                           'child': sender,
-                                           'constraint': str(constraint.equation),
-                                           'route': messaging.ANNOUNCE_RESPONSE_MSG_ACK,
-                                           'network': self.network,
-                                       }))
+    def receive_child_added(self, message):
+        self.log.debug(f'Received ChildAdded: {message}')
+        sender = message['payload']['agent_id']
 
-            self.log.error(f'parent = {self.parent}, children = {self.children}')
-
-            if self.agent.graph_traversing_order == 'top-down':
-                self.reset()
-        elif connected:
-            # respond if connection is not possible and cannot be confirmed
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                       body=messaging.create_connection_status_message({
-                                           'agent_id': self.agent.agent_id,
-                                           'status': False,
-                                       }))
-
-        # announce cycle is complete so remove this sender to allow future connections
-        self.responses.remove(sender)
-        self.busy = False
-
-    def receive_connection_status_message(self, payload):
-        data = payload['payload']
-        sender = data['agent_id']
-        status = data['status']
-
-        if status:
-            self.log.error(f'received con status {payload}')
-            constraint = self.agent.get_constraint(sender)
-            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
-            previous_network = self.network
-            self.network = data['network']
-            self.on_network_changed()
-            self.agent.connection_extra_args_callback(sender, data['extra_args'])
-
-            # inform dashboard about connection
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                       body=messaging.create_agent_connection_message({
-                                           'agent_id': self.agent.agent_id,
-                                           'child': self.agent.agent_id,
-                                           'parent': sender,
-                                           'constraint': str(constraint.equation),
-                                           'route': messaging.ANNOUNCE_RESPONSE_MSG,
-                                           'network': self.network,
-                                           'previous': previous_network,
-                                       }))
-
-            self.log.error(f'parent = {self.parent}, children = {self.children}')
-
-            if not self.children:
-                self.busy = False
+        if self.state == State.ACTIVE and not self.parent:
+            self.state = State.INACTIVE
+            self.parent = sender
+            self.agent.connection_extra_args_callback(sender, message['payload']['extra_args'])
+            self._send_to_agent(
+                body=messaging.create_parent_assigned_message({
+                    'agent_id': self.agent.agent_id,
+                    'extra_args': self.agent.connection_extra_args,
+                }),
+                to=sender,
+            )
 
             if self.agent.graph_traversing_order == 'bottom-up':
-                self.reset()
-        elif self.parent == sender:
-            self.parent = None
+                self._start_dcop()
 
-    def receive_set_network_message(self, payload):
-        data = payload['payload']
-        network = data['network']
-        sender = data['agent_id']
-        thread_id = data['thread_id']
+    def receive_parent_assigned(self, message):
+        self.log.debug(f'Received ParentAssigned: {message}')
 
-        # if thread_id == self.agent.agent_id:
-        #     self.log.info(f'Disconnecting from agent {sender}')
-        #     self.disconnect_neighbor(sender)
-        #     self.send_disconnection_message(sender)
-        # else:
-        self.network = network
-        self.on_network_changed(thread_id)
+        sender = message['payload']['agent_id']
+        self.agent.connection_extra_args_callback(sender, message['payload']['extra_args'])
 
-        if not self.children:
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.public',
-                                       body=messaging.create_network_update_completion({
-                                           'agent_id': self.agent.agent_id,
-                                           'network': self.network,
-                                       }))
+        if self.agent.graph_traversing_order == 'top-down':
+            self._start_dcop()
 
-    def send_disconnection_message(self, sender):
-        # send a disconnection message to sender
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                   body=messaging.create_disconnection_message({
-                                       'agent_id': self.agent.agent_id,
-                                   }))
-
-    def receive_disconnection_message(self, payload):
-        self.log.info(f'Received disconnection message {payload}')
-        sender = payload['payload']
-        self.disconnect_neighbor(sender)
-
-    def disconnect_neighbor(self, sender):
-        # remove sender from connections
-        if self.parent == sender:
-            self.busy = True
-            self.parent = None
-        elif sender in self.children:
-            self.children.remove(sender)
-
-        if sender in self.neighbors:
-            self.agent.active_constraints.pop(f'{self.agent.agent_id},{sender}')
-            self.agent.agent_disconnection_callback(sender)
-            self.report_agent_disconnection(sender)
-
-        self.log.info(f'Disconnected from agent {sender}')
-
-    def ping_neighbors(self):
-        for agent in self.neighbors:
-            if agent not in self.pinged_list_dict:
-                self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                           routing_key=f'{messaging.AGENTS_CHANNEL}.{agent}',
-                                           body=messaging.create_ping_message({
-                                               'agent_id': self.agent.agent_id,
-                                           }))
-                self.pinged_list_dict[agent] = 1
-            else:
-                self.pinged_list_dict[agent] += 1
-
-        # remove agents that are no longer connected (we didn't hear from them)
-        if self.pinged_list_dict:
-            self.remove_inactive_connections()
-
-    def receive_ping_message(self, payload):
-        data = payload['payload']
-        sender = data['agent_id']
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                   body=messaging.create_ping_response_message({
-                                       'agent_id': self.agent.agent_id,
-                                   }))
-
-    def receive_ping_response_message(self, payload):
-        data = payload['payload']
-        sender = data['agent_id']
-
-        if sender in self.pinged_list_dict:
-            self.pinged_list_dict.pop(sender)
-            self.log.debug(f'received ping response from agent {sender}')
-            self.log.debug(f'after: {self.pinged_list_dict}')
-
-    def receive_network_update_completion_message(self, payload):
-        network = payload['payload']['network']
-        self.log.debug(self.busy)
-        self.log.debug(payload)
-        if self.network == network:
-            self.busy = False
-
-    def receive_constraint_changed_message(self, payload):
-        self.log.info(payload)
-        data = payload['payload']
-        sender = data['agent_id']
-
-        # update the constraint
-        coefficients = data['coefficients']
-        constraint = self.agent.get_constraint(sender, coefficients)
-        self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
-
-        # check for DCOP initiation
-        if self.agent.graph_traversing_order == 'top-down' and self.is_child(sender):
-            self.reset()
-        elif self.agent.graph_traversing_order == 'bottom-up' and self.is_parent(sender):
-            self.reset()
-
-        self.log.info('constraint changed')
-
-    def change_constraint(self, coefficients, neighbor_id):
-        # update constraint's coefficients (event injection)
-        self.log.info(f'constraint change requested: agent-{neighbor_id}')
-        constraint = self.agent.get_constraint(neighbor_id, coefficients)
-        self.agent.active_constraints[f'{self.agent.agent_id},{neighbor_id}'] = constraint
-
-        # inform neighbor of constraint update
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.AGENTS_CHANNEL}.{neighbor_id}',
-                                   body=messaging.create_constraint_changed_message({
-                                       'agent_id': self.agent.agent_id,
-                                       'coefficients': coefficients,
-                                   }))
-
-        # check for DCOP initiation
-        if self.agent.graph_traversing_order == 'top-down' and self.is_child(neighbor_id):  # parent node
-            self.reset()
-        elif self.agent.graph_traversing_order == 'bottom-up' and self.is_parent(neighbor_id):  # then it is a leaf node
-            self.reset()
-
-        self.agent.metrics.update_metrics()
+    def receive_already_active(self, message):
+        self.log.debug(f'Received AlreadyActive: {message}')
+        self.state = State.INACTIVE

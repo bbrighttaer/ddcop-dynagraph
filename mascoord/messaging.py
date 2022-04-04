@@ -29,19 +29,14 @@ DISCONNECTION_MESSAGE = 'DISCONNECTION_MESSAGE'
 DCOP_DONE = 'DCOP_DONE'
 
 # agent channel message types
-ANNOUNCE_MSG = 'ANNOUNCE_MSG'
-ANNOUNCE_RESPONSE_MSG = 'ANNOUNCE_RESPONSE_MSG'
-ANNOUNCE_RESPONSE_MSG_ACK = 'ANNOUNCE_RESPONSE_MSG_ACK'
-CONNECTION_STATUS = 'CONNECTION_STATUS'
-BROADCAST_MSG = 'BROADCAST_MSG'
-BROADCAST_RESPONSE_MSG = 'BROADCAST_RESPONSE_MSG'
-BROADCAST_RESPONSE_MSG_ACK = 'BROADCAST_RESPONSE_MSG_ACK'
-NEIGHBOR_STATE_REQUEST = 'NEIGHBOR_STATE_REQUEST'
-NEIGHBOR_STATE_REQUEST_RESPONSE = 'NEIGHBOR_STATE_REQUEST_RESPONSE'
-SET_NETWORK = 'SET_NETWORK'
+ANNOUNCE = 'ANNOUNCE_MSG'
+ANNOUNCE_RESPONSE = 'ANNOUNCE_RESPONSE_MSG'
+ADD_ME = 'ADD_ME'
+CHILD_ADDED = 'CHILD_ADDED'
+PARENT_ASSIGNED = 'PARENT_ASSIGNED'
+ALREADY_ACTIVE = 'ALREADY_ACTIVE'
 PING_MESSAGE = 'PING_MESSAGE'
 PING_RESPONSE_MESSAGE = 'PING_RESPONSE_MESSAGE'
-NETWORK_UPDATE_COMPLETION = 'NETWORK_UPDATE_COMPLETION'
 CONSTRAINT_CHANGED = 'CONSTRAINT_CHANGED'
 
 # monitor channel message types
@@ -80,27 +75,27 @@ def create_test_message(data):
 
 
 def create_announce_message(data):
-    return _create_msg(ANNOUNCE_MSG, data)
+    return _create_msg(ANNOUNCE, data)
+
+
+def create_add_me_message(data):
+    return _create_msg(ADD_ME, data)
+
+
+def create_child_added_message(data):
+    return _create_msg(CHILD_ADDED, data)
+
+
+def create_parent_assigned_message(data):
+    return _create_msg(PARENT_ASSIGNED, data)
 
 
 def create_announce_response_message(data):
-    return _create_msg(ANNOUNCE_RESPONSE_MSG, data)
+    return _create_msg(ANNOUNCE_RESPONSE, data)
 
 
-def create_announce_response_message_ack(data):
-    return _create_msg(ANNOUNCE_RESPONSE_MSG_ACK, data)
-
-
-def create_broadcast_message(data):
-    return _create_msg(BROADCAST_MSG, data)
-
-
-def create_broadcast_response_message(data):
-    return _create_msg(BROADCAST_RESPONSE_MSG, data)
-
-
-def create_broadcast_response_message_ack(data):
-    return _create_msg(BROADCAST_RESPONSE_MSG_ACK, data)
+def create_already_active_message(data):
+    return _create_msg(ALREADY_ACTIVE, data)
 
 
 def create_agent_connection_message(data):
@@ -119,20 +114,8 @@ def create_cost_message(data):
     return _create_msg(COST_MESSAGE, data)
 
 
-def create_state_request_message(data):
-    return _create_msg(NEIGHBOR_STATE_REQUEST, data)
-
-
-def create_state_request_response_message(data):
-    return _create_msg(NEIGHBOR_STATE_REQUEST_RESPONSE, data)
-
-
 def create_cpa_report_message(data):
     return _create_msg(AGENT_CPA_REPORT, data)
-
-
-def create_set_network_message(data):
-    return _create_msg(SET_NETWORK, data)
 
 
 def create_ping_message(data):
@@ -161,10 +144,6 @@ def create_agent_shutdown_message(data):
 
 def create_agent_report(data):
     return _create_msg(AGENT_REPORT, data)
-
-
-def create_network_update_completion(data):
-    return _create_msg(NETWORK_UPDATE_COMPLETION, data)
 
 
 def create_saved_simulations_report(data):
@@ -201,7 +180,3 @@ def create_dcop_done_message(data):
 
 def create_disconnection_message(data):
     return _create_msg(DISCONNECTION_MESSAGE, data)
-
-
-def create_connection_status_message(data):
-    return _create_msg(CONNECTION_STATUS, data)
