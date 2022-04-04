@@ -313,13 +313,13 @@ class MetricsTable:
 
         self.announce_msg_count = {}
         self.announce_res_msg_count = {}
-        self.announce_resp_msg_ack_count = {}
-        self.set_network_count = {}
+        self.add_me_count = {}
+        self.child_added_count = {}
+        self.parent_assigned_count = {}
+        self.already_active_count = {}
         self.ping_msg_count = {}
         self.ping_msg_resp_count = {}
-        self.network_update_comp_count = {}
         self.constraint_changed_count = {}
-        self.disconnection_msg_count = {}
 
         self.last_event = None
         self.last_event_date_time = None
@@ -334,13 +334,13 @@ class MetricsTable:
             num_active_agents = 0
             announce_msg_count = 0
             announce_res_msg_count = 0
-            announce_resp_msg_ack_count = 0
-            set_network_count = 0
+            add_me_count = 0
+            child_added_count = 0
+            parent_assigned_count = 0
+            already_active_count = 0
             ping_msg_count = 0
             ping_msg_resp_count = 0
-            network_update_comp_count = 0
             constraint_changed_count = 0
-            disconnection_count = 0
 
             for node in agents.values():
                 if not node.terminate:
@@ -351,13 +351,13 @@ class MetricsTable:
 
                     announce_msg_count += node.announce_msg_count
                     announce_res_msg_count += node.announce_res_msg_count
-                    announce_resp_msg_ack_count += node.announce_resp_msg_ack_count
-                    set_network_count += node.set_network_count
+                    add_me_count += node.add_me_count
+                    child_added_count += node.child_added_count
+                    parent_assigned_count += node.parent_assigned_count
+                    already_active_count += node.already_active_count
                     ping_msg_count += node.ping_msg_count
                     ping_msg_resp_count += node.ping_msg_resp_count
-                    network_update_comp_count += node.network_update_comp_count
                     constraint_changed_count += node.constraint_changed_count
-                    disconnection_count += node.disconnection_msg_count
 
                     node.set_edge_costs()
 
@@ -369,13 +369,13 @@ class MetricsTable:
 
             self.announce_msg_count[self.last_event] = announce_msg_count
             self.announce_res_msg_count[self.last_event] = announce_res_msg_count
-            self.announce_resp_msg_ack_count[self.last_event] = announce_resp_msg_ack_count
-            self.set_network_count[self.last_event] = set_network_count
+            self.add_me_count[self.last_event] = add_me_count
+            self.child_added_count[self.last_event] = child_added_count
+            self.parent_assigned_count[self.last_event] = parent_assigned_count
+            self.already_active_count[self.last_event] = already_active_count
             self.ping_msg_count[self.last_event] = ping_msg_count
             self.ping_msg_resp_count[self.last_event] = ping_msg_resp_count
-            self.network_update_comp_count[self.last_event] = network_update_comp_count
             self.constraint_changed_count[self.last_event] = constraint_changed_count
-            self.disconnection_msg_count[self.last_event] = disconnection_count
 
             save_simulation_metrics_handler()
 
@@ -401,13 +401,13 @@ class MetricsTable:
                 # dynamic graph stats
                 'announce_msg_count': list(self.announce_msg_count.values()),
                 'announce_res_msg_count': list(self.announce_res_msg_count.values()),
-                'announce_resp_msg_ack_count': list(self.announce_resp_msg_ack_count.values()),
-                'set_network_count': list(self.set_network_count.values()),
+                'add_me_count': list(self.add_me_count.values()),
+                'child_added_count': list(self.child_added_count.values()),
+                'parent_assigned_count': list(self.parent_assigned_count.values()),
+                'already_active_count': list(self.already_active_count.values()),
                 'ping_msg_count': list(self.ping_msg_count.values()),
                 'ping_msg_resp_count': list(self.ping_msg_resp_count.values()),
-                'network_update_comp_count': list(self.network_update_comp_count.values()),
                 'constraint_changed_count': list(self.constraint_changed_count.values()),
-                'disconnection_msg_count': list(self.disconnection_msg_count.values()),
             })
             df.to_csv(path, index=False)
 
