@@ -35,8 +35,8 @@ ADD_ME = 'ADD_ME'
 CHILD_ADDED = 'CHILD_ADDED'
 PARENT_ASSIGNED = 'PARENT_ASSIGNED'
 ALREADY_ACTIVE = 'ALREADY_ACTIVE'
-PING_MESSAGE = 'PING_MESSAGE'
-PING_RESPONSE_MESSAGE = 'PING_RESPONSE_MESSAGE'
+PING = 'PING'
+PING_RESPONSE = 'PING_RESPONSE'
 CONSTRAINT_CHANGED = 'CONSTRAINT_CHANGED'
 
 # monitor channel message types
@@ -119,11 +119,11 @@ def create_cpa_report_message(data):
 
 
 def create_ping_message(data):
-    return _create_msg(PING_MESSAGE, data)
+    return _create_msg(PING, data)
 
 
 def create_ping_response_message(data):
-    return _create_msg(PING_RESPONSE_MESSAGE, data)
+    return _create_msg(PING_RESPONSE, data)
 
 
 def create_agent_disconnection_message(data):

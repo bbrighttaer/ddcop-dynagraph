@@ -125,6 +125,7 @@ class DynaGraph:
 
         if self.state == State.INACTIVE:
             constraint = self.agent.get_constraint(sender)
+            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
             self.children.append(sender)
             self.children_history[sender] = constraint
             self._send_to_agent(
@@ -149,6 +150,8 @@ class DynaGraph:
         sender = message['payload']['agent_id']
 
         if self.state == State.ACTIVE and not self.parent:
+            constraint = self.agent.get_constraint(sender)
+            self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
             self.state = State.INACTIVE
             self.parent = sender
             self.agent.connection_extra_args_callback(sender, message['payload']['extra_args'])
@@ -175,3 +178,75 @@ class DynaGraph:
     def receive_already_active(self, message):
         self.log.debug(f'Received AlreadyActive: {message}')
         self.state = State.INACTIVE
+
+    def ping_neighbors(self):
+        for agent in self.neighbors:
+            if agent not in self.pinged_list_dict:
+                self._send_to_agent(
+                    body=messaging.create_ping_message({'agent_id': self.agent.agent_id}),
+                    to=agent,
+                )
+                self.pinged_list_dict[agent] = 1
+            else:
+                self.pinged_list_dict[agent] += 1
+
+        # remove agents that are no longer connected (we didn't hear from them)
+        if self.pinged_list_dict:
+            self._remove_dead_connections()
+
+    def receive_ping_message(self, message):
+        self.log.debug(f'Received Ping message: {message}')
+        sender = message['payload']['agent_id']
+
+        if self.is_neighbor(sender):
+            self._send_to_agent(
+                body=messaging.create_ping_response_message({'agent_id': self.agent.agent_id}),
+                to=sender,
+            )
+
+    def receive_ping_response_message(self, message):
+        data = message['payload']
+        sender = data['agent_id']
+
+        if sender in self.pinged_list_dict:
+            self.log.debug(f'Received ping response from agent {sender}')
+            self.pinged_list_dict.pop(sender)
+            self.log.debug(f'Pinged list after removing {sender}: {self.pinged_list_dict}')
+
+    def _remove_dead_connections(self):
+        disconnected = False
+        temp_list = list(self.pinged_list_dict.keys())
+        self.log.debug(f'Temp list for removal: {temp_list}')
+
+        for agent in temp_list:
+            if self.pinged_list_dict[agent] >= MAX_PING_COUNT:
+
+                # remove constraint
+                self.agent.active_constraints.pop(f'{self.agent.agent_id},{agent}')
+
+                # remove from neighbor list
+                if self.parent == agent:
+                    self.state = State.INACTIVE
+                    self.parent = None
+                    self.agent.cpa.clear()
+                    self.agent.initialize_announce_call_exp_decay()  # so that Announce msgs can be published faster
+                else:
+                    self.children.remove(agent)
+
+                disconnected = True
+                self.agent.agent_disconnection_callback(agent)
+                self._report_agent_disconnection(agent)
+                self.pinged_list_dict.pop(agent)
+
+        if disconnected:
+            self._start_dcop()
+
+    def _report_agent_disconnection(self, agent):
+        # inform dashboard about disconnection
+        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                   routing_key=f'{messaging.MONITORING_CHANNEL}',
+                                   body=messaging.create_agent_disconnection_message({
+                                       'agent_id': self.agent.agent_id,
+                                       'node1': self.agent.agent_id,
+                                       'node2': agent,
+                                   }))

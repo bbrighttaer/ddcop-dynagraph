@@ -69,10 +69,7 @@ class Agent:
         self.metrics = kwargs['metrics']
         self.shared_config = kwargs['shared_config']
 
-        # control announce calls with exponential decay
-        self.initial_rate = .4
-        self.num_connect_calls = 0
-        self.decay_rate = 0.1
+        self.initialize_announce_call_exp_decay()
 
         self.is_client_asleep = False
 
@@ -127,6 +124,12 @@ class Agent:
         self.dcop = dcop_algorithm(self, num_discrete_points=kwargs['domain_size'])
 
         self.report_shutdown = False
+
+    def initialize_announce_call_exp_decay(self):
+        # control announce calls with exponential decay
+        self.initial_rate = .4
+        self.num_connect_calls = 0
+        self.decay_rate = 0.1
 
     @property
     def graph_traversing_order(self):
@@ -322,18 +325,18 @@ class Agent:
             case messaging.ALREADY_ACTIVE:
                 self.graph.receive_already_active(message)
 
+            case messaging.PING:
+                self.graph.receive_ping_message(message)
+                # self.increment_messages_count()
+                self.ping_msg_count += 1
+
+            case messaging.PING_RESPONSE:
+                self.graph.receive_ping_response_message(message)
+                # self.increment_messages_count()
+                self.ping_msg_resp_count += 1
+
             case _:
                 self.log.info(f'Could not handle received payload: {message}')
-
-        # elif message_type == messaging.PING_MESSAGE:
-        #     self.graph.receive_ping_message(payload)
-        #     # self.increment_messages_count()
-        #     self.ping_msg_count += 1
-
-        # elif message_type == messaging.PING_RESPONSE_MESSAGE:
-        #     self.graph.receive_ping_response_message(payload)
-        #     # self.increment_messages_count()
-        #     self.ping_msg_resp_count += 1
 
         # elif message_type == messaging.CONSTRAINT_CHANGED:
         #     self.graph.receive_constraint_changed_message(payload)
@@ -384,7 +387,7 @@ class Agent:
             # check if neighbors should be pinged
             if not last_ping_call_time or datetime.datetime.now() > last_ping_call_time \
                     + datetime.timedelta(seconds=config.PING_PROC_CALL_DELAY_IN_SECONDS):
-                # self.graph.ping_neighbors()
+                self.graph.ping_neighbors()
 
                 last_ping_call_time = datetime.datetime.now()
 
@@ -404,7 +407,6 @@ class Agent:
                                        routing_key=f'{messaging.MONITORING_CHANNEL}',
                                        body=messaging.create_agent_shutdown_message({
                                            'agent_id': self.agent_id,
-                                           'network': self.graph.network,
                                        }))
         # remove rabbitmq resources
         self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,

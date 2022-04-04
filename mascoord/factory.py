@@ -97,11 +97,11 @@ class Runner:
 
         handlers.add_agent_handler({'num_agents': self.exec_args.num_agents})
 
-        time.sleep(120)
+        time.sleep(30)
 
         # handlers.change_constraint_handler({'num_agents': self.exec_args.num_const_change})
 
-        # handlers.remove_agent_handler({'num_agents': self.exec_args.num_remove})
+        handlers.remove_agent_handler({'num_agents': self.exec_args.num_remove})
 
     def execute_sim_from_files(self, sim_file):
         log.info(f'Executing from sim files, using predefined network: {config.shared_config.use_predefined_graph}')
