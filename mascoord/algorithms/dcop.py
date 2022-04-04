@@ -295,31 +295,6 @@ class CCoCoA(DCOP):
             self.cpa = data['cpa']
             self.execute_dcop()
 
-    def request_states_of_neighbors(self):
-        for agent in self.graph.neighbors:
-            self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                             routing_key=f'{messaging.AGENTS_CHANNEL}.{agent}',
-                                             body=messaging.create_state_request_message({
-                                                 'agent_id': self.agent.agent_id,
-                                             }))
-
-    def receive_state_request(self, payload):
-        data = payload['payload']
-        sender = data['agent_id']
-
-        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                         routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
-                                         body=messaging.create_state_request_response_message({
-                                             'agent_id': self.agent.agent_id,
-                                             'state': self.state
-                                         }))
-
-    def receive_state_request_response(self, payload):
-        data = payload['payload']
-        sender = data['agent_id']
-        if sender in self.graph.neighbors:
-            self.neighbor_states[sender] = data['state']
-
     def __str__(self):
         return 'c-cocoa'
 
@@ -380,13 +355,14 @@ class SDPOP(DCOP):
             constraint = self.agent.active_constraints[f'{self.agent.agent_id},{self.graph.parent}']
             self.X_ij = constraint.equation.evaluate({'x': xx, 'y': yy}) + c_util_sum.reshape(-1, 1)
             x_j = self.X_ij.min(axis=0)
+            x_j = x_j / np.linalg.norm(x_j)
 
             self.send_util_message(self.graph.parent, x_j.tolist())
         else:
             # parent-level projection
             x_i = np.min(c_util_sum, axis=0)
 
-            self.cost = float(np.min(x_i))
+            self.cost = float(np.min(x_i))  # todo: wrong cost computation
             self.value = self.domain[int(np.argmin(x_i))]
             self.agent.value_changes_count += 1
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
@@ -452,7 +428,7 @@ class SDPOP(DCOP):
             self.cpa = parent_cpa
             j = self.neighbor_domains[sender].index(parent_value)
             x_i = self.X_ij[:, j].reshape(-1, )
-            self.cost = float(x_i.min())
+            self.cost = float(x_i.min())  # todo: wrong cost computation
             self.value = self.domain[int(x_i.argmin())]
             self.agent.value_changes_count += 1
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
@@ -502,6 +478,8 @@ class CSDPOP(SDPOP):
         super(CSDPOP, self).__init__(*args, **kwargs)
         self.max_iter = 100
         self.alpha = config.LEARNING_RATE
+        self.X_ij_prev_norm = None
+        self.prev_initial_val = None
 
     def _compute_util_and_value(self):
         # children
@@ -509,6 +487,9 @@ class CSDPOP(SDPOP):
         for child in self.graph.children:
             c_util = self.util_messages[child]
             c_util_sum += np.array(c_util)
+
+        # parent-level projection
+        x_i = np.min(c_util_sum, axis=0)
 
         # parent
         if self.graph.parent:
@@ -521,32 +502,33 @@ class CSDPOP(SDPOP):
             constraint = self.agent.active_constraints[f'{self.agent.agent_id},{self.graph.parent}']
             self.X_ij = constraint.equation.evaluate({'x': xx, 'y': yy}) + c_util_sum.T
 
-            self.send_util_message(self.graph.parent, self.X_ij.tolist())
+            if self.X_ij_prev_norm is None or np.linalg.norm(self.X_ij) != self.X_ij_prev_norm:
+                self.send_util_message(self.graph.parent, self.X_ij.tolist())
+            self.X_ij_prev_norm = np.linalg.norm(self.X_ij)
         else:
-            # parent-level projection
-            x_i = np.min(c_util_sum, axis=0)
-
             # set this agent's initial value
             j = int(np.argmin(x_i))
             self.value = self.domain[j]
 
             # get initial agent values for optimization
             initial_val = self.value
-            agent_values = {self.agent.agent_id: self.value}
-            for child in self.graph.children:
-                c_util = np.array(self.util_messages[child])
-                agent_values[child] = self.neighbor_domains[child][np.argmin(c_util[:, j])]
+            if self.prev_initial_val is None or self.prev_initial_val != initial_val:
+                agent_values = {self.agent.agent_id: self.value}
+                for child in self.graph.children:
+                    c_util = np.array(self.util_messages[child])
+                    agent_values[child] = self.neighbor_domains[child][np.argmin(c_util[:, j])]
 
-            self.nonlinear_optimization(agent_values)
+                self.nonlinear_optimization(agent_values)
 
-            self.cpa[f'agent-{self.agent.agent_id}'] = self.value
+                self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
-            self.log.info(f'Cost is {self.cost}')
+                self.log.info(f'Cost is {self.cost}')
 
-            # send value msgs to children
-            self.log.info(f'children: {self.graph.children}')
-            for child in self.graph.children:
-                self.send_value_message(child, {'cpa': self.cpa, 'initial-value': initial_val})
+                # send value msgs to children
+                self.log.info(f'children: {self.graph.children}')
+                for child in self.graph.children:
+                    self.send_value_message(child, {'cpa': self.cpa, 'initial-value': initial_val})
+            self.prev_initial_val = initial_val
 
         self.util_received = False
 
@@ -569,25 +551,27 @@ class CSDPOP(SDPOP):
             self.value = self.domain[int(x_i.argmin())]
             initial_val = self.value
 
-            agent_values = {
-                self.agent.agent_id: self.value,
-                sender: parent_value,
-            }
+            if self.prev_initial_val is None or self.prev_initial_val != initial_val:
+                agent_values = {
+                    self.agent.agent_id: self.value,
+                    sender: parent_value,
+                }
 
-            k = self.domain.index(self.value)
-            for child in self.graph.children:
-                c_util = np.array(self.util_messages[child])
-                agent_values[child] = self.neighbor_domains[child][np.argmin(c_util[:, k])]
+                k = self.domain.index(self.value)
+                for child in self.graph.children:
+                    c_util = np.array(self.util_messages[child])
+                    agent_values[child] = self.neighbor_domains[child][np.argmin(c_util[:, k])]
 
-            self.nonlinear_optimization(agent_values)
+                self.nonlinear_optimization(agent_values)
 
-            self.cpa[f'agent-{self.agent.agent_id}'] = self.value
+                self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
-            self.log.info(f'Cost is {self.cost}')
+                self.log.info(f'Cost is {self.cost}')
 
-            # send value msgs to children
-            for child in self.graph.children:
-                self.send_value_message(child, {'cpa': self.cpa, 'initial-value': initial_val})
+                # send value msgs to children
+                for child in self.graph.children:
+                    self.send_value_message(child, {'cpa': self.cpa, 'initial-value': initial_val})
+            self.prev_initial_val = initial_val
 
     def nonlinear_optimization(self, agent_values):
         # non-linear optimization
