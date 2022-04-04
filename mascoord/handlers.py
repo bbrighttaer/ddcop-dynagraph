@@ -118,10 +118,11 @@ def add_agent_handler(msg):
 
             _spawn_agent(agent_id)
 
-            time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
+            if not is_graph_gen():
+                time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
     else:
         for i in range(num_agents):
-            agent_id = len(agents)
+            agent_id = i if is_graph_gen() else len(agents)
             evt = f'{ADD_AGENT}:{agent_id}'
             commands.append(evt)
 
@@ -130,13 +131,18 @@ def add_agent_handler(msg):
 
             _spawn_agent(agent_id=agent_id)
 
-            time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
+            if not is_graph_gen():
+                time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
 
     # time.sleep(2)
     # client.publish(f'{messaging.FACTORY_COMMAND_CHANNEL}/',
     #                messaging.create_test_message({
     #                    'msg': 'this is a test message from factory',
     #                }))
+
+
+def is_graph_gen():
+    return config.shared_config.execution_mode == 'graph-gen'
 
 
 def _spawn_agent(agent_id):
@@ -321,56 +327,56 @@ class MetricsTable:
         self.can_save = True
 
     def update_metrics(self):
-        messages_count = 0
-        total_cost = 0
-        num_changes = 0
-        num_active_agents = 0
-        announce_msg_count = 0
-        announce_res_msg_count = 0
-        announce_resp_msg_ack_count = 0
-        set_network_count = 0
-        ping_msg_count = 0
-        ping_msg_resp_count = 0
-        network_update_comp_count = 0
-        constraint_changed_count = 0
-        disconnection_count = 0
-
-        for node in agents.values():
-            if not node.terminate:
-                num_active_agents += 1
-                messages_count += node.messages_count
-                total_cost += node.cost
-                num_changes += node.value_changes_count
-
-                announce_msg_count += node.announce_msg_count
-                announce_res_msg_count += node.announce_res_msg_count
-                announce_resp_msg_ack_count += node.announce_resp_msg_ack_count
-                set_network_count += node.set_network_count
-                ping_msg_count += node.ping_msg_count
-                ping_msg_resp_count += node.ping_msg_resp_count
-                network_update_comp_count += node.network_update_comp_count
-                constraint_changed_count += node.constraint_changed_count
-                disconnection_count += node.disconnection_msg_count
-
-                node.set_edge_costs()
-
-        self.cost[self.last_event] = total_cost
-        self.edge_cost_per_event[self.last_event] = sum(self.edge_cost_per_agent.values())
-        self.message_count[self.last_event] = messages_count
-        self.num_changes_per_event[self.last_event] = num_changes
-        self.num_agents_per_event[self.last_event] = num_active_agents
-
-        self.announce_msg_count[self.last_event] = announce_msg_count
-        self.announce_res_msg_count[self.last_event] = announce_res_msg_count
-        self.announce_resp_msg_ack_count[self.last_event] = announce_resp_msg_ack_count
-        self.set_network_count[self.last_event] = set_network_count
-        self.ping_msg_count[self.last_event] = ping_msg_count
-        self.ping_msg_resp_count[self.last_event] = ping_msg_resp_count
-        self.network_update_comp_count[self.last_event] = network_update_comp_count
-        self.constraint_changed_count[self.last_event] = constraint_changed_count
-        self.disconnection_msg_count[self.last_event] = disconnection_count
-
         if self.can_save:
+            messages_count = 0
+            total_cost = 0
+            num_changes = 0
+            num_active_agents = 0
+            announce_msg_count = 0
+            announce_res_msg_count = 0
+            announce_resp_msg_ack_count = 0
+            set_network_count = 0
+            ping_msg_count = 0
+            ping_msg_resp_count = 0
+            network_update_comp_count = 0
+            constraint_changed_count = 0
+            disconnection_count = 0
+
+            for node in agents.values():
+                if not node.terminate:
+                    num_active_agents += 1
+                    messages_count += node.messages_count
+                    total_cost += node.cost
+                    num_changes += node.value_changes_count
+
+                    announce_msg_count += node.announce_msg_count
+                    announce_res_msg_count += node.announce_res_msg_count
+                    announce_resp_msg_ack_count += node.announce_resp_msg_ack_count
+                    set_network_count += node.set_network_count
+                    ping_msg_count += node.ping_msg_count
+                    ping_msg_resp_count += node.ping_msg_resp_count
+                    network_update_comp_count += node.network_update_comp_count
+                    constraint_changed_count += node.constraint_changed_count
+                    disconnection_count += node.disconnection_msg_count
+
+                    node.set_edge_costs()
+
+            self.cost[self.last_event] = total_cost
+            self.edge_cost_per_event[self.last_event] = sum(self.edge_cost_per_agent.values())
+            self.message_count[self.last_event] = messages_count
+            self.num_changes_per_event[self.last_event] = num_changes
+            self.num_agents_per_event[self.last_event] = num_active_agents
+
+            self.announce_msg_count[self.last_event] = announce_msg_count
+            self.announce_res_msg_count[self.last_event] = announce_res_msg_count
+            self.announce_resp_msg_ack_count[self.last_event] = announce_resp_msg_ack_count
+            self.set_network_count[self.last_event] = set_network_count
+            self.ping_msg_count[self.last_event] = ping_msg_count
+            self.ping_msg_resp_count[self.last_event] = ping_msg_resp_count
+            self.network_update_comp_count[self.last_event] = network_update_comp_count
+            self.constraint_changed_count[self.last_event] = constraint_changed_count
+            self.disconnection_msg_count[self.last_event] = disconnection_count
+
             save_simulation_metrics_handler()
 
     def update_edge_cost(self, agent1, agent2, cost):
