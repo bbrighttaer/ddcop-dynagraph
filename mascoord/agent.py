@@ -335,13 +335,13 @@ class Agent:
                 # self.increment_messages_count()
                 self.ping_msg_resp_count += 1
 
+            case messaging.CONSTRAINT_CHANGED:
+                self.graph.receive_constraint_changed_message(message)
+                self.increment_messages_count()
+                self.constraint_changed_count += 1
+
             case _:
                 self.log.info(f'Could not handle received payload: {message}')
-
-        # elif message_type == messaging.CONSTRAINT_CHANGED:
-        #     self.graph.receive_constraint_changed_message(payload)
-        #     self.increment_messages_count()
-        #     self.constraint_changed_count += 1
 
         # C-CoCoA message handling
         # elif message_type == messaging.UPDATE_STATE_MESSAGE:
@@ -356,7 +356,7 @@ class Agent:
         #     self.dcop.receive_cost_message(payload)
         #     self.increment_messages_count()
 
-        # SDPOP message handling
+        # SDPOP/C-SDPOP message handling
         # elif message_type == messaging.VALUE_MESSAGE:
         #     self.dcop.receive_value_message(payload)
         #     self.increment_messages_count()

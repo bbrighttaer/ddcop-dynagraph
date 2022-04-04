@@ -250,3 +250,46 @@ class DynaGraph:
                                        'node1': self.agent.agent_id,
                                        'node2': agent,
                                    }))
+
+    def change_constraint(self, coefficients, neighbor_id):
+        # update constraint's coefficients (event injection)
+        self.log.debug(f'Constraint change requested: agent-{neighbor_id}')
+        constraint = self.agent.get_constraint(neighbor_id, coefficients)
+        self.agent.active_constraints[f'{self.agent.agent_id},{neighbor_id}'] = constraint
+
+        # inform neighbor of constraint update
+        self._send_to_agent(
+            body=messaging.create_constraint_changed_message({
+                'agent_id': self.agent.agent_id,
+                'coefficients': coefficients,
+            }),
+            to=neighbor_id,
+        )
+
+        # check for DCOP initiation
+        if self.agent.graph_traversing_order == 'top-down' and self.is_child(neighbor_id):  # parent node case
+            self._start_dcop()
+        elif self.agent.graph_traversing_order == 'bottom-up' and self.is_parent(neighbor_id):  # child node case
+            self._start_dcop()
+
+        self.agent.metrics.update_metrics()
+
+    def receive_constraint_changed_message(self, message):
+        self.log.debug(f'Received constraint changed: {message}')
+        data = message['payload']
+        sender = data['agent_id']
+
+        # update the constraint
+        coefficients = data['coefficients']
+        constraint = self.agent.get_constraint(sender, coefficients)
+        self.agent.active_constraints[f'{self.agent.agent_id},{sender}'] = constraint
+
+        # check for DCOP initiation
+        if self.agent.graph_traversing_order == 'top-down' and self.is_child(sender):
+            self._start_dcop()
+        elif self.agent.graph_traversing_order == 'bottom-up' and self.is_parent(sender):
+            self._start_dcop()
+
+        self.log.debug('Constraint changed')
+
+

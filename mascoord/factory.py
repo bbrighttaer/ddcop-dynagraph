@@ -99,7 +99,7 @@ class Runner:
 
         time.sleep(30)
 
-        # handlers.change_constraint_handler({'num_agents': self.exec_args.num_const_change})
+        handlers.change_constraint_handler({'num_agents': self.exec_args.num_const_change})
 
         handlers.remove_agent_handler({'num_agents': self.exec_args.num_remove})
 
