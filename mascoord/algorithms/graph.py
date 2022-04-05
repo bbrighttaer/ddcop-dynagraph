@@ -124,6 +124,7 @@ class DynaGraph:
         using_saved_sim = self.agent.shared_config.use_predefined_graph
 
         if self.state == State.INACTIVE \
+                and len(self.children) < self.agent.shared_config.max_out_degree \
                 and ((using_saved_sim and key in self.agent.coefficients_dict) or not using_saved_sim):
             constraint = self.agent.get_constraint(sender)
             self.agent.active_constraints[key] = constraint
