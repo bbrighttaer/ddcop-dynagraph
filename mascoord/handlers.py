@@ -186,6 +186,8 @@ def remove_agent_handler(msg):
 
                 # agents.pop(selected_id)
                 log.info(f'Removed agent {selected_agent}')
+            else:
+                log.info('No agent selected to be removed')
 
 
 def change_constraint_handler(msg):
