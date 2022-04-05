@@ -381,6 +381,7 @@ class Agent:
             if not last_ping_call_time or datetime.datetime.now() > last_ping_call_time \
                     + datetime.timedelta(seconds=config.PING_PROC_CALL_DELAY_IN_SECONDS):
                 self.graph.ping_neighbors()
+                # self.listen_to_network()
 
                 last_ping_call_time = datetime.datetime.now()
 
