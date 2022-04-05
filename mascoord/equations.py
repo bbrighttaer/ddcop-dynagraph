@@ -1,81 +1,31 @@
-import py_expression_eval
-import collections
-
-parser = py_expression_eval.Parser()
-
-
-class Equation:
-    name = 'Equation'
-
-    def __init__(self, **kwargs):
-        self._eq = None
-        self._ddy = None
-        self._ddx = None
-
-        self.coefficients = kwargs
-        # raw equation structure
-        self.formula = ''
-
-        # formula of first order differential w.r.t. x
-        self.ddx_formula = ''
-
-        # formula of first order differential w.r.t. y
-        self.ddy_formula = ''
-
-    def set_equation_and_differentials(self):
-        self._eq = self._parse(self.formula)
-        self._ddx = self._parse(self.ddx_formula)
-        self._ddy = self._parse(self.ddy_formula)
-
-    @property
-    def equation(self):
-        return self._eq
-
-    @property
-    def ddx(self):
-        return self._ddx
-
-    @property
-    def ddy(self):
-        return self._ddy
-
-    def _parse(self, formula):
-        eq = parser.parse(formula)
-        for key in self.coefficients:
-            eq = eq.substitute(key, self.coefficients[key])
-        return eq
-
-    def __str__(self):
-        return f'{self.equation.toString()}, ddx={self.ddx.toString()}, ddy={self.ddy.toString()}'
-
-
-class Linear(Equation):
+class Linear:
     name = 'linear'
 
     def __init__(self, a, b, c):
-        super(Linear, self).__init__(a=a, b=b, c=c)
+        pass
 
 
-class Quadratic(Equation):
+class Quadratic:
     name = 'quadratic'
 
     def __init__(self, a, b, c):
-        super(Quadratic, self).__init__(a=a, b=b, c=c)
+        self.coefficients = {'a': a, 'b': b, 'c': c}
 
-        self.formula = 'a * x^2 + b * x * y + c * y^2'
-        self.ddx_formula = '2 * a * x + b * y'
-        self.ddy_formula = 'b * x + 2 * c * y'
+        self.formula = f'{a} * x^2 + {b} * x * y + {c} * y^2'
+        self.ddx_formula = f'2 * {a} * x + {b} * y'
+        self.ddy_formula = f'{b} * x + 2 * {c} * y'
 
-        self.set_equation_and_differentials()
+    def calculate(self, x, y):
+        a, b, c = self.coefficients['a'], self.coefficients['b'], self.coefficients['c']
+        return a * x ** 2 + b * x * y + c * y ** 2
 
+    def ddx(self, x, y):
+        a, b = self.coefficients['a'], self.coefficients['b']
+        return 2 * a * x + b * y
 
-class Cubic(Equation):
-    name = 'cubic'
+    def ddy(self, x, y):
+        b, c = self.coefficients['b'], self.coefficients['c']
+        return b * x + 2 * c * y
 
-
-equations_directory = {
-    Linear.name: Linear,
-    Quadratic.name: Quadratic,
-    Cubic.name: Cubic
-}
-equations_directory = collections.defaultdict(lambda: Linear, equations_directory)
+    def __str__(self):
+        return self.formula
