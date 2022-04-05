@@ -1,24 +1,8 @@
 import datetime
 import math
-import os
 import time
 
 import yaml
-from paho.mqtt import client as mqtt
-
-
-def connect_client(client, sync=True):
-    # enable TLS
-    client.tls_set(tls_version=mqtt.ssl.PROTOCOL_TLS)
-
-    # set username and password
-    client.username_pw_set(os.environ['HIVEMQ_USERNAME'], os.environ['HIVEMQ_PASSWORD'])
-
-    # connect to HiveMQ Cloud
-    if sync:
-        client.connect(os.environ['HIVEMQ_CLOUD_ADDRESS'], int(os.environ['HIVEMQ_CLOUD_PORT']))
-    else:
-        client.connect_async(os.environ['HIVEMQ_CLOUD_ADDRESS'], int(os.environ['HIVEMQ_CLOUD_PORT']))
 
 
 def get_agent_config(agent_id):
