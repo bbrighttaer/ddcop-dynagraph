@@ -144,6 +144,13 @@ if __name__ == '__main__':
         default=3,
         help='The number of discrete points in the domain of the agent',
     )
+    parser.add_argument(
+        '-l',
+        '--logger_level',
+        choices=['debug', 'info', 'warning', 'error', 'critical'],
+        default='debug',
+        dest='logger_level',
+    )
 
     subparsers = parser.add_subparsers(
         title='Execution modes',
@@ -202,6 +209,8 @@ if __name__ == '__main__':
 
     command = args.command
     config.shared_config.execution_mode = command
+    config.shared_config.logger_level = args.logger_level.upper()
+
     if command == 'graph-gen':
         handlers.set_dcop_algorithm('no-dcop')
         config.shared_config.use_predefined_graph = False
@@ -223,7 +232,6 @@ if __name__ == '__main__':
         log.info(f'Simulation elapsed time: {sim_time}')
     elif command == 'simulation':
         config.shared_config.use_predefined_graph = True
-        config.shared_config.logger_level = 'INFO'
         simulations = os.listdir('simulations')
         sim_files = [file for file in simulations if '.sim' in file]
 
