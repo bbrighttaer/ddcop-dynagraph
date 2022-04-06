@@ -193,12 +193,21 @@ def remove_agent_handler(msg):
 def change_constraint_handler(msg):
     if agents:
         for i in range(msg['num_agents']):
-            coefficients = [round(random.uniform(-5, 5), 3) for _ in range(3)]
-            selected_id = random.choice(list(agents.keys()))
-            selected_agent = agents[selected_id]
-            selected_neighbor = selected_agent.select_random_neighbor()
+            if config.shared_config.execution_mode == 'simulation':
+                command_parts = msg['command'].split(':')
+                command_agents = command_parts[1].split('-')
+                selected_id = command_agents[0]
+                selected_agent = agents[selected_id]
+                selected_neighbor = command_agents[1]
+                coefficients = [float(val) for val in command_parts[2].split(';')]
+                evt = msg['command']
+            else:
+                coefficients = [round(random.uniform(-5, 5), 3) for _ in range(3)]
+                selected_id = random.choice(list(agents.keys()))
+                selected_agent = agents[selected_id]
+                selected_neighbor = selected_agent.select_random_neighbor()
+                evt = f'{CHANGE_CONSTRAINT}:{selected_id}-{selected_neighbor}:' + ';'.join([str(v) for v in coefficients])
 
-            evt = f'{CHANGE_CONSTRAINT}:{selected_id}-{selected_neighbor}:' + '-'.join([str(v) for v in coefficients])
             commands.append(evt)
 
             metrics.last_event = evt
@@ -272,6 +281,7 @@ def play_simulation_handler(msg):
             handler({
                 'num_agents': 1,
                 'agent_id': split[1],
+                'command': com,
             })
     log.info('End of simulation')
 
