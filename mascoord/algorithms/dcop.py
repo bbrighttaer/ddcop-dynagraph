@@ -37,7 +37,7 @@ class DCOP:
         for neighbor in self.graph.neighbors:
             constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
             n_value = best_params[neighbor]
-            self.cost += constraint.equation.evaluate({'x': self.value, 'y': n_value})
+            self.cost += constraint.evaluate(self.value, n_value)
         self.log.info(f'Cost is {self.cost}')
 
         self.collect_metrics()
@@ -49,7 +49,7 @@ class DCOP:
                     constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
                     n_value = self.params[neighbor]
                     if n_value:
-                        cost = constraint.equation.evaluate({'x': self.value, 'y': n_value})
+                        cost = constraint.evaluate(self.value, n_value)
                         self.agent.metrics.update_edge_cost(self.agent.agent_id, neighbor, cost)
         except:
             pass
@@ -191,10 +191,10 @@ class CCoCoA(DCOP):
             for neighbor in self.graph.neighbors:
                 constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
                 n_value = best_params[neighbor]
-                grad_sum += constraint.ddx.evaluate({'x': self.value, 'y': n_value})
+                grad_sum += constraint.ddx(self.value, n_value)
 
                 # neighbor value optimization
-                n_grad = constraint.ddy.evaluate({'x': self.value, 'y': n_value})
+                n_grad = constraint.ddy(self.value, n_value)
                 n_value = n_value - self.alpha * n_grad
                 best_params[neighbor] = min(max(self.domain_lb, n_value), self.domain_ub)
 
@@ -274,7 +274,7 @@ class CCoCoA(DCOP):
                 iter_list = [self.value] if self.value and sender in self.graph.children else self.domain
 
                 for value2 in iter_list:
-                    cost = constraint.equation.evaluate({'x': value2, 'y': value1})
+                    cost = constraint.evaluate(value2, value1)
                     if cost < min_cost:
                         entry = (value1, value2, cost)
                         min_cost = cost
@@ -353,7 +353,7 @@ class SDPOP(DCOP):
             xx, yy = np.meshgrid(x, y, indexing='ij')
 
             constraint = self.agent.active_constraints[f'{self.agent.agent_id},{self.graph.parent}']
-            self.X_ij = constraint.equation.evaluate({'x': xx, 'y': yy}) + c_util_sum.reshape(-1, 1)
+            self.X_ij = constraint.evaluate(xx, yy) + c_util_sum.reshape(-1, 1)
             x_j = self.X_ij.min(axis=0)
             x_j = x_j / np.linalg.norm(x_j)
 
@@ -500,7 +500,7 @@ class CSDPOP(SDPOP):
             xx, yy = np.meshgrid(x, y, indexing='ij')
 
             constraint = self.agent.active_constraints[f'{self.agent.agent_id},{self.graph.parent}']
-            self.X_ij = constraint.equation.evaluate({'x': xx, 'y': yy}) + c_util_sum.T
+            self.X_ij = constraint.evaluate(xx, yy) + c_util_sum.T
 
             if self.X_ij_prev_norm is None or np.linalg.norm(self.X_ij) != self.X_ij_prev_norm:
                 self.send_util_message(self.graph.parent, self.X_ij.tolist())
@@ -580,11 +580,11 @@ class CSDPOP(SDPOP):
             for neighbor in self.graph.neighbors:
                 constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
                 n_value = agent_values[neighbor]
-                grad_sum += constraint.ddx.evaluate({'x': self.value, 'y': n_value})
+                grad_sum += constraint.ddx(self.value, n_value)
 
                 # child value optimization (parent value is already set)
                 if self.graph.is_child(neighbor):
-                    n_grad = constraint.ddy.evaluate({'x': self.value, 'y': n_value})
+                    n_grad = constraint.ddy(self.value, n_value)
                     n_value = n_value - self.alpha * n_grad
                     agent_values[neighbor] = min(max(self.domain_lb, n_value), self.domain_ub)
 

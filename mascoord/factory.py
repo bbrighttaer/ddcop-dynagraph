@@ -223,6 +223,7 @@ if __name__ == '__main__':
         log.info(f'Simulation elapsed time: {sim_time}')
     elif command == 'simulation':
         config.shared_config.use_predefined_graph = True
+        config.shared_config.logger_level = 'INFO'
         simulations = os.listdir('simulations')
         sim_files = [file for file in simulations if '.sim' in file]
 
