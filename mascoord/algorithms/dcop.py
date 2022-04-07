@@ -189,14 +189,15 @@ class CCoCoA(DCOP):
         for i in range(self.max_iter):
             grad_sum = 0
             for neighbor in self.graph.neighbors:
-                constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
-                n_value = best_params[neighbor]
-                grad_sum += constraint.ddx(self.value, n_value)
+                if neighbor in best_params:  # needed due to async nature of execution
+                    constraint = self.agent.active_constraints[f'{self.agent.agent_id},{neighbor}']
+                    n_value = best_params[neighbor]
+                    grad_sum += constraint.ddx(self.value, n_value)
 
-                # neighbor value optimization
-                n_grad = constraint.ddy(self.value, n_value)
-                n_value = n_value - self.alpha * n_grad
-                best_params[neighbor] = min(max(self.domain_lb, n_value), self.domain_ub)
+                    # neighbor value optimization
+                    n_grad = constraint.ddy(self.value, n_value)
+                    n_value = n_value - self.alpha * n_grad
+                    best_params[neighbor] = min(max(self.domain_lb, n_value), self.domain_ub)
 
             self.value = self.value - self.alpha * grad_sum
 

@@ -226,7 +226,9 @@ class DynaGraph:
             if self.pinged_list_dict[agent] >= MAX_PING_COUNT:
 
                 # remove constraint
-                self.agent.active_constraints.pop(f'{self.agent.agent_id},{agent}')
+                key = f'{self.agent.agent_id},{agent}'
+                if key in self.agent.active_constraints:
+                    self.agent.active_constraints.pop(key)
 
                 # remove from neighbor list
                 if self.parent == agent:
