@@ -1,24 +1,12 @@
 import datetime
 import math
-import os
 import time
 
 import yaml
-from paho.mqtt import client as mqtt
 
+import logger
 
-def connect_client(client, sync=True):
-    # enable TLS
-    client.tls_set(tls_version=mqtt.ssl.PROTOCOL_TLS)
-
-    # set username and password
-    client.username_pw_set(os.environ['HIVEMQ_USERNAME'], os.environ['HIVEMQ_PASSWORD'])
-
-    # connect to HiveMQ Cloud
-    if sync:
-        client.connect(os.environ['HIVEMQ_CLOUD_ADDRESS'], int(os.environ['HIVEMQ_CLOUD_PORT']))
-    else:
-        client.connect_async(os.environ['HIVEMQ_CLOUD_ADDRESS'], int(os.environ['HIVEMQ_CLOUD_PORT']))
+log = logger.get_logger('Util module')
 
 
 def get_agent_config(agent_id):
@@ -96,8 +84,8 @@ def reset_coefficients_dict_and_nodes_list(filename):
     coefficients_dict = read_coefficients(f'simulations/{filename}')
     nodes_list = read_edges(f'simulations/{filename}')
 
-    print(f'coefficients_dict (len={len(coefficients_dict)}) '
-          f'and nodes_list (len={len(nodes_list)}) have been successfully reset')
+    log.info(f'coefficients_dict (len={len(coefficients_dict)}) '
+             f'and nodes_list (len={len(nodes_list)}) have been successfully reset')
 
 
 def time_since(since):

@@ -97,11 +97,13 @@ class Runner:
 
         handlers.add_agent_handler({'num_agents': self.exec_args.num_agents})
 
-        time.sleep(30)
+        time.sleep(60)
 
         handlers.change_constraint_handler({'num_agents': self.exec_args.num_const_change})
 
         handlers.remove_agent_handler({'num_agents': self.exec_args.num_remove})
+
+        time.sleep(30)
 
     def execute_sim_from_files(self, sim_file):
         log.info(f'Executing from sim files, using predefined network: {config.shared_config.use_predefined_graph}')
@@ -141,6 +143,13 @@ if __name__ == '__main__':
         type=int,
         default=3,
         help='The number of discrete points in the domain of the agent',
+    )
+    parser.add_argument(
+        '-l',
+        '--logger_level',
+        choices=['debug', 'info', 'warning', 'error', 'critical'],
+        default='debug',
+        dest='logger_level',
     )
 
     subparsers = parser.add_subparsers(
@@ -200,6 +209,8 @@ if __name__ == '__main__':
 
     command = args.command
     config.shared_config.execution_mode = command
+    config.shared_config.logger_level = args.logger_level.upper()
+
     if command == 'graph-gen':
         handlers.set_dcop_algorithm('no-dcop')
         config.shared_config.use_predefined_graph = False

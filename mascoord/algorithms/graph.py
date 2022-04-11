@@ -124,6 +124,7 @@ class DynaGraph:
         using_saved_sim = self.agent.shared_config.use_predefined_graph
 
         if self.state == State.INACTIVE \
+                and len(self.children) < self.agent.shared_config.max_out_degree \
                 and ((using_saved_sim and key in self.agent.coefficients_dict) or not using_saved_sim):
             constraint = self.agent.get_constraint(sender)
             self.agent.active_constraints[key] = constraint
@@ -136,6 +137,7 @@ class DynaGraph:
                 }),
                 to=sender,
             )
+            self.log.info(f'Added agent {sender} to children: {self.children}')
 
             # inform dashboard about the connection
             self._report_connection(parent=self.agent.agent_id, child=sender, constraint=constraint)
@@ -163,6 +165,7 @@ class DynaGraph:
                 }),
                 to=sender,
             )
+            self.log.info(f'Set parent node to agent {sender}')
 
             if self.agent.graph_traversing_order == 'bottom-up':
                 self._start_dcop()
@@ -223,7 +226,9 @@ class DynaGraph:
             if self.pinged_list_dict[agent] >= MAX_PING_COUNT:
 
                 # remove constraint
-                self.agent.active_constraints.pop(f'{self.agent.agent_id},{agent}')
+                key = f'{self.agent.agent_id},{agent}'
+                if key in self.agent.active_constraints:
+                    self.agent.active_constraints.pop(key)
 
                 # remove from neighbor list
                 if self.parent == agent:
@@ -254,7 +259,7 @@ class DynaGraph:
 
     def change_constraint(self, coefficients, neighbor_id):
         # update constraint's coefficients (event injection)
-        self.log.debug(f'Constraint change requested: agent-{neighbor_id}')
+        self.log.info(f'Constraint change requested: agent-{neighbor_id}')
         constraint = self.agent.get_constraint(neighbor_id, coefficients)
         self.agent.active_constraints[f'{self.agent.agent_id},{neighbor_id}'] = constraint
 
@@ -276,7 +281,7 @@ class DynaGraph:
         self.agent.metrics.update_metrics()
 
     def receive_constraint_changed_message(self, message):
-        self.log.debug(f'Received constraint changed: {message}')
+        self.log.info(f'Received constraint changed: {message}')
         data = message['payload']
         sender = data['agent_id']
 

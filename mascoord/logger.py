@@ -1,7 +1,6 @@
 import os
 import logging
-
-LOGGING_LEVEL = logging.DEBUG
+import config
 
 created_loggers = {}
 
@@ -17,7 +16,7 @@ def get_logger(name, prefix=None):
 
         os.makedirs('logs/', exist_ok=True)
         logger = logging.getLogger(name)
-        logger.setLevel(LOGGING_LEVEL)
+        logger.setLevel(config.shared_config.logger_level)
 
         # create handlers
         c_handler = logging.StreamHandler()
