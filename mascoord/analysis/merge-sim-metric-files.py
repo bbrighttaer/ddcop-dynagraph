@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 import tqdm
 
-keywords = [('-c-cocoa-', 'max-deg-3'), ('c-cocoa-max-deg-3', '')]
-metrics_dir = '../metrics/c-cocoa-dcop-metrics'
+keywords = [('-c-sdpop-', 'max-deg-3'), ('c-cocoa-max-deg-3', '')]
+metrics_dir = '../metrics'
 
 
 def main():
