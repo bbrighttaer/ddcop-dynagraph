@@ -272,9 +272,9 @@ class CCoCoA(DCOP):
                 entry = None
 
                 # if this agent has already set its value then keep it fixed
-                iter_list = [self.value] if self.value and sender in self.graph.children else self.domain
+                # iter_list = [self.value] if self.value and sender in self.graph.children else self.domain
 
-                for value2 in iter_list:
+                for value2 in self.domain:
                     cost = constraint.evaluate(value2, value1)
                     if cost < min_cost:
                         entry = (value1, value2, cost)
@@ -496,7 +496,8 @@ class CSDPOP(SDPOP):
         if self.graph.parent:
             p_domain = self.neighbor_domains[self.graph.parent]
 
-            x = np.array(self.domain).reshape(-1, 1)
+            domain = [self.value] * len(self.domain) if self.value else self.domain
+            x = np.array(domain).reshape(-1, 1)
             y = np.array(p_domain).reshape(-1, 1)
             xx, yy = np.meshgrid(x, y, indexing='ij')
 
