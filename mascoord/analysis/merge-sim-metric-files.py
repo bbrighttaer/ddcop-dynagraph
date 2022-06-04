@@ -4,10 +4,10 @@ import numpy as np
 import tqdm
 
 keywords = [
-    ('-c-cocoa-', 'max-deg-6', 'dc-cocoa-d10'),
+    ('-c-sdpop-', 'max-deg-3', 'dc-sdpop'),
     # ('c-cocoa', 'max-deg-3', 'c-cocoa')
 ]
-metrics_dir = '../metrics-collected-on-21-04-2022/'
+metrics_dir = '../metrics-collected-on-13-04-2022'
 
 
 def main():
