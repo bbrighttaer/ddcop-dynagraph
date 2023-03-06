@@ -131,8 +131,8 @@ def add_agent_handler(msg):
 
             _spawn_agent(agent_id=agent_id)
 
-            if not is_graph_gen():
-                time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
+            # if not is_graph_gen():
+            #     time.sleep(config.HANDLER_COMM_EXEC_DELAY_IN_SECONDS)
 
     # time.sleep(2)
     # client.publish(f'{messaging.FACTORY_COMMAND_CHANNEL}/',

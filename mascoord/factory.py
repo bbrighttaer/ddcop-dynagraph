@@ -1,13 +1,15 @@
 import argparse
+import functools
 import os
 import random
+import signal
 import time
 
-import pika
+import logger
 
 import config
-import logger
-import messaging
+from mascoord.config import DYNAMIC_SIM_ENV
+from mascoord.runner import Runner
 from mascoord.utils import time_since
 
 log = logger.get_logger('Factory')
@@ -15,114 +17,12 @@ log = logger.get_logger('Factory')
 start_time = time.time()
 
 
-def on_message(ch, method, properties, body):
-    msg = eval(body.decode('utf-8'))
-    from mascoord import handlers
-    func = handlers.directory.get(msg['type'], None)
-
-    if func:
-        func(msg)
-    else:
-        log.warning(f'Message type {msg["type"]} has no handler')
+def _on_force_exit(sub_exit_func, sig, frame):
+    sub_exit_func(sig, frame)
 
 
-class Runner:
-
-    def __init__(self, exec_args):
-        self.exec_args = exec_args
-
-        self.client = pika.BlockingConnection(pika.ConnectionParameters(
-            host=config.BROKER_URL,
-            port=config.BROKER_PORT,
-            heartbeat=0,  # only for experiment purposes - not recommended (https://www.rabbitmq.com/heartbeats.html)
-            credentials=pika.credentials.PlainCredentials(config.PIKA_USERNAME, config.PIKA_PASSWORD))
-        )
-        self.channel = self.client.channel()
-        self.channel.exchange_declare(exchange=messaging.COMM_EXCHANGE, exchange_type='topic')
-
-        self._terminate = False
-
-        # factory queue
-        self.queue_name = 'factory-queue'
-        self.channel.queue_declare(queue=self.queue_name, exclusive=True)
-
-        # register topics (aka routing keys) associated to the factory queue
-        self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
-                                queue=self.queue_name,
-                                routing_key=f'{messaging.DASHBOARD_COMMAND_CHANNEL}.#')
-        self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
-                                queue=self.queue_name,
-                                routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#')
-
-        # subscribe to dashboard commands
-        self.channel.basic_consume(queue=self.queue_name, on_message_callback=on_message, auto_ack=True)
-
-        # send available simulations to dashboard
-        simulations = os.listdir('simulations')
-        if simulations:
-            parsed_sim = [{
-                'date': sim.removesuffix('.sim'),
-                'filename': sim,
-            } for sim in simulations if '.sim' in sim]
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                       body=messaging.create_saved_simulations_report({
-                                           'simulations': parsed_sim,
-                                       }))
-
-        # report algorithm in use
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                   body=messaging.create_dcop_algorithm_report({
-                                       'dcop': handlers.dcop_algorithm.name,
-                                   }))
-
-    @property
-    def terminate(self):
-        return self._terminate
-
-    @terminate.setter
-    def terminate(self, flag):
-        self._terminate = flag
-
-    def execute_sim_with_dashboard(self):
-        log.info('Executing sim with dashboard (start dashboard to execute commands)')
-        random.seed(0)
-        while not self.terminate:
-            self.client.sleep(0)
-        self.release_resources()
-
-    def execute_graph_gen(self):
-        log.info('Executing graph gen')
-
-        handlers.add_agent_handler({'num_agents': self.exec_args.num_agents})
-
-        time.sleep(60)
-
-        handlers.change_constraint_handler({'num_agents': self.exec_args.num_const_change})
-
-        handlers.remove_agent_handler({'num_agents': self.exec_args.num_remove})
-
-        time.sleep(30)
-
-    def execute_sim_from_files(self, sim_file):
-        log.info(f'Executing from sim files, using predefined network: {config.shared_config.use_predefined_graph}')
-        handlers.play_simulation_handler({'simulation': sim_file})
-
-    def release_resources(self):
-        log.info('Factory runner is closing')
-
-        # remove rabbitmq resources
-        self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
-                                  queue=self.queue_name,
-                                  routing_key=f'{messaging.DASHBOARD_COMMAND_CHANNEL}.#')
-        self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
-                                  queue=self.queue_name,
-                                  routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#')
-        self.channel.queue_delete(self.queue_name)
-        self.client.close()
-
-        log.info('Factory runner was closed successfully')
+def _on_timeout(on_timeout_func):
+    on_timeout_func()
 
 
 if __name__ == '__main__':
@@ -194,16 +94,47 @@ if __name__ == '__main__':
     )
 
     # simulation
-    parser_sim = subparsers.add_parser('simulation', help='Run the simulation from a given sim file')
-    parser_sim.add_argument(
+    sim_parser = subparsers.add_parser('simulation', help='Run the simulation from a given sim file')
+    sim_parser.add_argument(
         '--num_runs',
         type=int,
         required=True,
     )
 
+    # mst simulation
+    sim_parser = subparsers.add_parser('mst-simulation', help='Run the MST simulation')
+    sim_parser.add_argument(
+        '--num_agents',
+        type=int,
+        help='The set the number of agents to add to the environment',
+        required=True,
+    )
+    sim_parser.add_argument(
+        '--num_remove',
+        type=int,
+        help='The set the number of agents to remove from the environment',
+        default=0,
+    )
+    sim_parser.add_argument(
+        "--grid_size",
+        "-g",
+        default=3,
+        dest="grid_size",
+        type=int,
+        help="Size of the GridWorld",
+    )
+    sim_parser.add_argument(
+        "--num_targets",
+        "-k",
+        default=2,
+        dest="num_targets",
+        type=int,
+        help="Number of targets in the GridWorld",
+    )
+
     args = parser.parse_args()
 
-    from mascoord import handlers
+    from mascoord import handlers, logger
 
     handlers.set_domain_size(args.domain_size)
 
@@ -228,8 +159,7 @@ if __name__ == '__main__':
                 })
                 handlers.reset_buffers()
                 runner.release_resources()
-        sim_time = time_since(start_time)
-        log.info(f'Simulation elapsed time: {sim_time}')
+
     elif command == 'simulation':
         config.shared_config.use_predefined_graph = True
         simulations = os.listdir('simulations')
@@ -247,9 +177,17 @@ if __name__ == '__main__':
                     handlers.reset_buffers()
                     runner.release_resources()
 
-        sim_time = time_since(start_time)
-        log.info(f'Simulation elapsed time: {sim_time}')
+    elif command == 'mst-simulation':
+        config.shared_config.execution_mode = DYNAMIC_SIM_ENV
+        handlers.set_dcop_algorithm('c-cocoa')
+        runner = Runner(args)
+        signal.signal(signal.SIGINT, functools.partial(_on_force_exit, runner.on_force_exit))
+        runner.start_simulation_environment(args)
+        runner.wait()
     else:
         handlers.set_dcop_algorithm(args.algs[0])
         runner = Runner(args)
         runner.execute_sim_with_dashboard()
+
+    sim_time = time_since(start_time)
+    log.info(f'Elapsed time: {sim_time}')

@@ -11,6 +11,7 @@ MONITORING_CHANNEL = f'{config.DOMAIN}.monitoring'  # for agent-to-dashboard mon
 DASHBOARD_COMMAND_CHANNEL = f'{config.DOMAIN}.command.dashboard'  # for dashboard-to-factory command msgs
 FACTORY_COMMAND_CHANNEL = f'{config.DOMAIN}.command.factory'  # for factory-agent msgs
 METRICS_CHANNEL = f'{config.DOMAIN}.metrics'
+SIM_ENV_CHANNEL = f'{config.DOMAIN}.sim_env'
 
 # dashboard command message types
 TEST = 'TEST'
@@ -60,6 +61,10 @@ COST_MESSAGE = 'CostMessage'
 VALUE_MESSAGE = 'ValueMessage'
 UTIL_MESSAGE = 'UtilMessage'
 REQUEST_UTIL_MESSAGE = 'RequestUtilMessage'
+
+# Sim environment message
+AGENT_ADDED = 'AGENT_ADDED'
+AGENT_REMOVED = 'AGENT_REMOVED'
 
 
 def _create_msg(msg_type, data):
@@ -180,3 +185,11 @@ def create_dcop_done_message(data):
 
 def create_disconnection_message(data):
     return _create_msg(DISCONNECTION_MESSAGE, data)
+
+
+def create_agent_added_message(data):
+    return _create_msg(AGENT_ADDED, data)
+
+
+def create_agent_removed_message(data):
+    return _create_msg(AGENT_REMOVED, data)

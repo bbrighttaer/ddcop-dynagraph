@@ -4,10 +4,6 @@ import time
 
 import yaml
 
-import logger
-
-log = logger.get_logger('Util module')
-
 
 def get_agent_config(agent_id):
     with open('agent-config.yml') as f:
@@ -84,8 +80,8 @@ def reset_coefficients_dict_and_nodes_list(filename):
     coefficients_dict = read_coefficients(f'simulations/{filename}')
     nodes_list = read_edges(f'simulations/{filename}')
 
-    log.info(f'coefficients_dict (len={len(coefficients_dict)}) '
-             f'and nodes_list (len={len(nodes_list)}) have been successfully reset')
+    print(f'coefficients_dict (len={len(coefficients_dict)}) '
+          f'and nodes_list (len={len(nodes_list)}) have been successfully reset')
 
 
 def time_since(since):
@@ -97,3 +93,11 @@ def time_since(since):
 
 def time_diff(start_time):
     return (time.time() - start_time) * 1000
+
+
+def notify_wrap(f, cb):
+    def wrapped(*args, **kwargs):
+        f(*args, **kwargs)
+        cb(*args, **kwargs)
+
+    return wrapped

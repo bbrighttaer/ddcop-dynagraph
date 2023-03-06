@@ -15,6 +15,8 @@ MAX_PING_COUNT = int(os.environ['MAX_PING_COUNT'])
 PIKA_USERNAME = os.environ['PIKA_USERNAME']
 PIKA_PASSWORD = os.environ['PIKA_PASSWORD']
 
+DYNAMIC_SIM_ENV = 'dynamic-sim-env'
+
 
 class SharedConfig:
 
