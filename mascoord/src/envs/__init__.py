@@ -2,7 +2,7 @@ from typing import Tuple
 
 import pika
 
-from mascoord import config, messaging, logger
+from mascoord.src import logger, messaging, config
 
 
 class SimulationEnvironment(object):

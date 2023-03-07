@@ -29,7 +29,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 from typing import List
 
-from mascoord.envs.simple_repr import SimpleRepr
+from mascoord.src.envs.simple_repr import SimpleRepr
 
 
 class EventAction(SimpleRepr):

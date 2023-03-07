@@ -1,7 +1,7 @@
 import enum
 
-from mascoord import messaging
-from mascoord.config import MAX_PING_COUNT
+from mascoord.src import messaging
+from mascoord.src.config import MAX_PING_COUNT
 
 
 class State(enum.Enum):

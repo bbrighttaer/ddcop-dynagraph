@@ -8,10 +8,11 @@ import pika
 import config
 import logger
 import messaging
-from mascoord import handlers
-from mascoord.envs.mobile_sensing import GridWorld
-from mascoord.envs.scenario import MSTScenario
-from mascoord.utils import notify_wrap
+from mascoord.definitions import ROOT_DIR
+from mascoord.src import handlers
+from mascoord.src.envs.mobile_sensing import GridWorld
+from mascoord.src.envs.scenario import MSTScenario
+from mascoord.src.utils import notify_wrap
 
 log = logger.get_logger('Runner')
 
@@ -63,7 +64,7 @@ class Runner:
         self.channel.basic_consume(queue=self.queue_name, on_message_callback=on_message, auto_ack=True)
 
         # send available simulations to dashboard
-        simulations = os.listdir('simulations')
+        simulations = os.listdir(os.path.join(ROOT_DIR, 'simulations'))
         if simulations:
             parsed_sim = [{
                 'date': sim.removesuffix('.sim'),

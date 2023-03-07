@@ -13,8 +13,8 @@ import config
 import logger
 import messaging
 from algorithms import graph
-from mascoord.equations import Quadratic
-from mascoord.utils import time_diff
+from mascoord.src.equations import Quadratic
+from mascoord.src.utils import time_diff
 
 
 def parse_amqp_body(body):

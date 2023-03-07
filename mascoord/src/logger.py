@@ -14,7 +14,7 @@ def get_logger(name, prefix=None):
         else:
             prefix = ''
 
-        os.makedirs('logs/', exist_ok=True)
+        os.makedirs('../logs/', exist_ok=True)
         logger = logging.getLogger(name)
         logger.setLevel(config.shared_config.logger_level)
 

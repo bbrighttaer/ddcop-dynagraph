@@ -35,7 +35,7 @@ from numbers import Number
 
 import numpy as np
 
-from mascoord.envs.various import func_args
+from mascoord.src.envs.various import func_args
 
 """
 Simple Representation module.

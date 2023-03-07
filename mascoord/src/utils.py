@@ -6,7 +6,7 @@ import yaml
 
 
 def get_agent_config(agent_id):
-    with open('agent-config.yml') as f:
+    with open('../agent-config.yml') as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
         for config in data:
             if config['agent']['id'] == agent_id:

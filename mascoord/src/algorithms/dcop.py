@@ -2,8 +2,7 @@ import random
 
 import numpy as np
 
-from mascoord import config
-from mascoord import messaging
+from mascoord.src import messaging, config
 
 
 class DCOP:

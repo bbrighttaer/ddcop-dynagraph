@@ -8,9 +8,9 @@ import time
 import logger
 
 import config
-from mascoord.config import DYNAMIC_SIM_ENV
-from mascoord.runner import Runner
-from mascoord.utils import time_since
+from mascoord.src.config import DYNAMIC_SIM_ENV
+from mascoord.src.runner import Runner
+from mascoord.src.utils import time_since
 
 log = logger.get_logger('Factory')
 
@@ -134,7 +134,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    from mascoord import handlers, logger
+    from mascoord.src import logger, handlers
 
     handlers.set_domain_size(args.domain_size)
 
@@ -162,7 +162,7 @@ if __name__ == '__main__':
 
     elif command == 'simulation':
         config.shared_config.use_predefined_graph = True
-        simulations = os.listdir('simulations')
+        simulations = os.listdir('../simulations')
         sim_files = [file for file in simulations if '.sim' in file]
 
         for algorithm in args.algs:

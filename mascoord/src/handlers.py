@@ -11,7 +11,7 @@ import config
 import logger
 import messaging
 import utils
-from mascoord.algorithms.dcop import DCOP, CSDPOP
+from mascoord.src.algorithms.dcop import DCOP, CSDPOP
 
 agents = {}
 terminated_agents = []
@@ -84,7 +84,7 @@ def create_and_start_agent(agent_id):
 
 
 def set_dcop_algorithm(alg):
-    from mascoord.algorithms.dcop import CCoCoA, SDPOP
+    from mascoord.src.algorithms.dcop import CCoCoA, SDPOP
     global dcop_algorithm
 
     dcop_algorithm = {
@@ -226,7 +226,7 @@ def agent_report_handler(msg):
 
 def save_simulation_handler(msg):
     label = datetime.datetime.now().timestamp()
-    base_path = f'simulations/'
+    base_path = f'../simulations/'
     os.makedirs(base_path, exist_ok=True)
 
     lines = [f'nodes={len(agents)}\n', f'commands={" ".join(commands)}\n']
@@ -293,9 +293,9 @@ def set_metrics_file_prefix(val):
 
 def save_simulation_metrics_handler(msg=None):
     prefix = metrics_file_prefix if metrics_file_prefix else ''
-    os.makedirs('metrics', exist_ok=True)
+    os.makedirs('../metrics', exist_ok=True)
     label = f'{prefix}{dcop_algorithm.name}-d{domain_size}Lr{config.LEARNING_RATE}'
-    metrics_file = os.path.join('metrics/', f'{label}.csv')
+    metrics_file = os.path.join('../metrics/', f'{label}.csv')
     metrics.to_csv(metrics_file)
     log.info(f'Metrics saved at {metrics_file}')
 

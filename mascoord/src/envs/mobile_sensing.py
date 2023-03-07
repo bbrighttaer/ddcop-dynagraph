@@ -5,8 +5,8 @@ from typing import Tuple
 
 import numpy as np
 
-from mascoord import messaging, logger
-from mascoord.envs import SimulationEnvironment
+from mascoord.src import messaging
+from mascoord.src.envs import SimulationEnvironment
 
 
 class GridCell:
