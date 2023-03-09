@@ -2,6 +2,7 @@ import threading
 from typing import Tuple
 
 import pika
+import networkx as nx
 
 from mascoord.src import logger, messaging, config
 
@@ -21,6 +22,10 @@ class SimulationEnvironment(object):
         self._state_history = []
         self.time_step_delay = time_step_delay
         # self.agents = {}
+
+        # graphs
+        self._current_graph = nx.Graph()
+        self._previous_graph = None
 
         # communication props
         self.queue_name = 'sim-env-queue'
@@ -98,7 +103,7 @@ class SimulationEnvironment(object):
         """
         raise NotImplementedError('Global score logic is missing')
 
-    def on_action_selection(self, msg):
+    def _receive_value_selection(self, msg):
         """
         Applies selected value in the environment.
         """

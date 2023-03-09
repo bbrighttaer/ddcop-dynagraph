@@ -5,6 +5,7 @@ import math
 import queue
 import random
 import time
+from collections import defaultdict
 from traceback import print_exception
 
 import pika
@@ -14,7 +15,7 @@ import logger
 import messaging
 from algorithms import graph
 from mascoord.src.equations import Quadratic
-from mascoord.src.utils import time_diff
+from mascoord.src.utils import time_diff, notify_wrap
 
 
 def parse_amqp_body(body):
@@ -71,21 +72,9 @@ class Agent:
 
         self.is_client_asleep = False
 
-        self.messages_count = 0
-        self.value_changes_count = 0
         self.start_time = time.time()
         self.accum_time = 0
-
-        # dynamic graph stats
-        self.announce_msg_count = 0
-        self.announce_res_msg_count = 0
-        self.add_me_count = 0
-        self.child_added_count = 0
-        self.parent_assigned_count = 0
-        self.already_active_count = 0
-        self.ping_msg_count = 0
-        self.ping_msg_resp_count = 0
-        self.constraint_changed_count = 0
+        self.agent_metrics = AgentMetrics(self.agent_id, self.log)
 
         self.agents_in_comm_range = None
         self._num_new_agents = 0
@@ -120,6 +109,12 @@ class Agent:
                                                                          self.handle_message,
                                                                          self.agent_snapshot),
                                    auto_ack=True)
+
+        # Overwrite basic publish of channel to gather communication metrics
+        self.channel.basic_publish = notify_wrap(
+            self.channel.basic_publish,
+            self.agent_metrics.on_message_published,
+        )
 
         # algorithms
         self.graph = graph.DynaGraph(self)
@@ -444,35 +439,20 @@ class Agent:
 
     def register_agent(self):
         # register with dashboard
+        agent_reg_info = {
+                'agent_id': self.agent_id,
+            }
         self.channel.basic_publish(
             exchange=messaging.COMM_EXCHANGE,
             routing_key=f'{messaging.MONITORING_CHANNEL}',
-            body=bytes(
-                json.dumps({
-                    'type': messaging.AGENT_REGISTRATION,
-                    'payload': {
-                        'agent_id': self.agent_id,
-                    },
-                    'timestamp': datetime.datetime.now().timestamp(),
-                }),
-                'utf-8'
-            )
+            body=messaging.create_agent_registration_dashboard_message(agent_reg_info),
         )
 
         # register with sim environment
         self.channel.basic_publish(
             exchange=messaging.COMM_EXCHANGE,
             routing_key=f'{messaging.SIM_ENV_CHANNEL}',
-            body=bytes(
-                json.dumps({
-                    'type': messaging.AGENT_REGISTRATION,
-                    'payload': {
-                        'agent_id': self.agent_id,
-                    },
-                    'timestamp': datetime.datetime.now().timestamp(),
-                }),
-                'utf-8'
-            )
+            body=messaging.create_agent_registration_message(agent_reg_info),
         )
 
     def connect_exp_decay(self):
@@ -481,3 +461,48 @@ class Agent:
 
     def __str__(self) -> str:
         return self.agent_id
+
+
+class AgentMetrics:
+
+    def __init__(self, agent_id, log):
+        self.agent_id = agent_id
+        self.log = log
+        self.messages_count = 0
+        self._msg_type_count = defaultdict(int)
+
+    def on_message_published(self, *args, **kwargs):
+        # extract message
+        if len(args) >= 3:
+            message = args[2]
+        else:
+            message = kwargs['body']
+        message = json.loads(message)
+        self.log.debug(f'metrics intercepted {message}')
+
+        ignored_messages = [
+            messaging.AGENT_REGISTRATION_DASHBOARD,
+            messaging.AGENT_REPORT,
+            messaging.AGENT_CONNECTION_MSG,
+            messaging.AGENT_DISCONNECTION,
+            messaging.ADD_GRAPH_EDGE,
+            messaging.REMOVE_GRAPH_EDGE,
+            messaging.AGENT_STATE_CHANGED,
+        ]
+
+        if message['type'] in ignored_messages:
+            return
+
+        # update total messages published
+        self.messages_count += 1
+
+        # shortcut to keep track of each message type's count
+        self._msg_type_count[message['type']] += 1
+
+    def get_metrics(self):
+        metrics = {
+            'messages_count': self.messages_count,
+        }
+        metrics.update(self._msg_type_count)
+        return metrics
+

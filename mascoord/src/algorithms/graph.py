@@ -167,6 +167,17 @@ class DynaGraph:
             )
             self.log.info(f'Added agent {sender} to children: {self.children}')
 
+            # update current graph
+            self.channel.basic_publish(
+                exchange=messaging.COMM_EXCHANGE,
+                routing_key=f'{messaging.SIM_ENV_CHANNEL}',
+                body=messaging.create_add_graph_edge_message({
+                    'agent_id': self.agent.agent_id,
+                    'from': self.agent.agent_id,
+                    'to': sender,
+                })
+            )
+
             # inform dashboard about the connection
             self._report_connection(parent=self.agent.agent_id, child=sender, constraint=constraint)
         else:
@@ -194,6 +205,17 @@ class DynaGraph:
                 to=sender,
             )
             self.log.info(f'Set parent node to agent {sender}')
+
+            # update current graph
+            self.channel.basic_publish(
+                exchange=messaging.COMM_EXCHANGE,
+                routing_key=f'{messaging.SIM_ENV_CHANNEL}',
+                body=messaging.create_add_graph_edge_message({
+                    'agent_id': self.agent.agent_id,
+                    'from': sender,
+                    'to': self.agent.agent_id,
+                })
+            )
 
             if self.agent.graph_traversing_order == 'bottom-up':
                 self._start_dcop()
@@ -282,13 +304,26 @@ class DynaGraph:
 
     def _report_agent_disconnection(self, agent):
         # inform dashboard about disconnection
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                   body=messaging.create_agent_disconnection_message({
-                                       'agent_id': self.agent.agent_id,
-                                       'node1': self.agent.agent_id,
-                                       'node2': agent,
-                                   }))
+        self.channel.basic_publish(
+            exchange=messaging.COMM_EXCHANGE,
+            routing_key=f'{messaging.MONITORING_CHANNEL}',
+            body=messaging.create_agent_disconnection_message({
+                'agent_id': self.agent.agent_id,
+                'node1': self.agent.agent_id,
+                'node2': agent,
+            })
+        )
+
+        # update current graph
+        self.channel.basic_publish(
+            exchange=messaging.COMM_EXCHANGE,
+            routing_key=f'{messaging.SIM_ENV_CHANNEL}',
+            body=messaging.create_remove_graph_edge_message({
+                'agent_id': self.agent.agent_id,
+                'from': agent,
+                'to': self.agent.agent_id,
+            })
+        )
 
     def change_constraint(self, coefficients, neighbor_id):
         # update constraint's coefficients (event injection)

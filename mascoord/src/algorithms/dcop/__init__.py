@@ -86,9 +86,7 @@ class DCOP:
                 'agent_id': self.agent.agent_id,
                 'cpa': self.cpa,
                 'value': val,
-                'metrics': {
-
-                }
+                'metrics': self.agent.agent_metrics.get_metrics(),
             })
         )
 

@@ -78,7 +78,6 @@ class CoCoA(DCOP):
         self.log.info(f'Best params: {best_params}, {self.value}')
 
         # update agent
-        self.agent.value_changes_count += 1
         self.cpa[f'agent-{self.agent.agent_id}'] = self.value
         self.state = self.DONE
         self.report_state_change_to_dashboard()

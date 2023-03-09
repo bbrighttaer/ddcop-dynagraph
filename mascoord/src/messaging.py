@@ -44,6 +44,7 @@ CONSTRAINT_CHANGED = 'CONSTRAINT_CHANGED'
 # monitor channel message types
 AGENT_CONNECTION_MSG = 'AGENT_CONNECTION_MSG'
 AGENT_REGISTRATION = 'AGENT_REGISTRATION'
+AGENT_REGISTRATION_DASHBOARD = 'AGENT_REGISTRATION_DASHBOARD'
 AGENT_CPA_REPORT = 'AGENT_CPA_REPORT'
 AGENT_DISCONNECTION = 'AGENT_DISCONNECTION'
 AGENT_RESET = 'AGENT_RESET'
@@ -69,6 +70,8 @@ AGENT_REMOVED = 'AGENT_REMOVED'
 SIM_ENV_CURRENT_TIME_STEP_MSG = 'SIM_ENV_CURRENT_TIME_STEP_MSG'
 VALUE_SELECTED_MSG = 'VALUE_SELECTED_MSG'
 STOP_AGENT = 'STOP_AGENT'
+ADD_GRAPH_EDGE = 'ADD_GRAPH_EDGE'
+REMOVE_GRAPH_EDGE = 'REMOVE_GRAPH_EDGE'
 
 
 def _create_msg(msg_type, data):
@@ -213,3 +216,19 @@ def create_stop_agent_message(data):
 
 def create_announce_ignored_message(data):
     return _create_msg(ANNOUNCE_IGNORED, data)
+
+
+def create_agent_registration_message(data):
+    return _create_msg(AGENT_REGISTRATION, data)
+
+
+def create_agent_registration_dashboard_message(data):
+    return _create_msg(AGENT_REGISTRATION_DASHBOARD, data)
+
+
+def create_add_graph_edge_message(data):
+    return _create_msg(ADD_GRAPH_EDGE, data)
+
+
+def create_remove_graph_edge_message(data):
+    return _create_msg(REMOVE_GRAPH_EDGE, data)

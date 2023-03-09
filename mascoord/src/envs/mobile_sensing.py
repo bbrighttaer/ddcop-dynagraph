@@ -1,14 +1,17 @@
+import copy
 import functools
+import os.path
 import random
-import threading
 from collections import defaultdict
-from typing import Tuple
 
 import numpy as np
+import networkx as nx
+import csv
 
+from mascoord.definitions import ROOT_DIR
 from mascoord.src import messaging
 from mascoord.src.envs import SimulationEnvironment
-from mascoord.src.messaging import ANNOUNCE, AGENT_REGISTRATION, VALUE_SELECTED_MSG
+from mascoord.src.messaging import ANNOUNCE, AGENT_REGISTRATION, VALUE_SELECTED_MSG, ADD_GRAPH_EDGE, REMOVE_GRAPH_EDGE
 
 
 class GridCell:
@@ -139,10 +142,17 @@ class GridWorld(SimulationEnvironment):
 
         self._registered_agents = []
 
+        # metrics-related
+        self._metrics = {}
+        self._metrics_file_headers = []
+        self._metrics_file_name = 'metrics.csv'
+
         self._handlers = {
-            AGENT_REGISTRATION: self._received_agent_registration,
-            ANNOUNCE: self._received_announce_msg,
-            VALUE_SELECTED_MSG: self.on_action_selection,
+            AGENT_REGISTRATION: self._receive_agent_registration,
+            ANNOUNCE: self._receive_announce_msg,
+            VALUE_SELECTED_MSG: self._receive_value_selection,
+            ADD_GRAPH_EDGE: self._receive_add_graph_edge,
+            REMOVE_GRAPH_EDGE: self._receive_remove_graph_edge,
         }
 
     def __call__(self, *args, **kwargs):
@@ -184,7 +194,7 @@ class GridWorld(SimulationEnvironment):
         else:
             self.log.warning(f'Message type {msg["type"]} has no handler')
 
-    def _received_agent_registration(self, msg):
+    def _receive_agent_registration(self, msg):
         self.log.info(f'Received agent registration: {msg}')
         agent_id = msg['agent_id']
         self._registered_agents.append(agent_id)
@@ -202,7 +212,7 @@ class GridWorld(SimulationEnvironment):
             )
         )
 
-    def _received_announce_msg(self, msg):
+    def _receive_announce_msg(self, msg):
         self.log.info(f'Received announce message: {msg}')
         self._broadcast_announce(msg)
         self.client.call_later(0, functools.partial(self._broadcast_announce, msg))
@@ -230,16 +240,6 @@ class GridWorld(SimulationEnvironment):
                     self.log.info('Event action: Adding agent %s ', a)
                     self.run_stabilization_computation(a.args['agent'])
 
-                    # self.post_msg(
-                    #     ORCHESTRATOR_MGT,
-                    #     GraphConnectionMessage(
-                    #         action='add-node',
-                    #         node1=a.args['agent'],
-                    #         node2=None,
-                    #     ),
-                    #     MSG_MGT,
-                    # )
-
                     # send message to factory
                     self.channel.basic_publish(
                         exchange=messaging.COMM_EXCHANGE,
@@ -262,16 +262,6 @@ class GridWorld(SimulationEnvironment):
                         })
                     )
 
-                    # self.post_msg(
-                    #     ORCHESTRATOR_MGT,
-                    #     GraphConnectionMessage(
-                    #         action='remove_node',
-                    #         node1=a.args['agent'],
-                    #         node2=None,
-                    #     ),
-                    #     MSG_MGT,
-                    # )
-
             self.next_time_step()
             self.log.debug(self.history)
 
@@ -293,6 +283,9 @@ class GridWorld(SimulationEnvironment):
         # add sensor to cell
         selected_cell.add(msa)
 
+        # add node to current graph
+        self._current_graph.add_node(agent)
+
     def remove_agent(self, agent):
         # remove agent from agents list
         msa = self.agents.pop(agent)
@@ -301,6 +294,9 @@ class GridWorld(SimulationEnvironment):
         cell: GridCell = msa.current_cell
         cell.contents.pop(cell.contents.index(msa))
 
+        # remove node from current graph
+        self._current_graph.remove_node(agent)
+
     def next_time_step(self):
         self._disable_detected_targets()
         self._current_time_step += 1
@@ -308,7 +304,7 @@ class GridWorld(SimulationEnvironment):
         self._state_history.append((f't={str(self._current_time_step)}', grid))
         self.log.info(f'Current time step: {self._current_time_step}')
 
-        # send time step information to agents
+        # send time step information to already registered agents
         for agent in self._registered_agents:
             self._send_time_step_info(agent)
 
@@ -414,7 +410,7 @@ class GridWorld(SimulationEnvironment):
 
         return score
 
-    def on_action_selection(self, msg):
+    def _receive_value_selection(self, msg):
         self.log.info(f'Received action selection: {msg}')
         self._delayed_actions[msg['agent_id']] = msg
 
@@ -460,7 +456,6 @@ class GridWorld(SimulationEnvironment):
         self.log.info(f'Applying actions: num of actions = {len(self._delayed_actions)}, num_agents: {len(self.agents)}')
         for msg in self._delayed_actions.values():
             self._apply_selected_action(agent=msg['agent_id'], value=msg['value'])
-        self._delayed_actions.clear()
 
     def calc_agent_score(self, agent: MobileSensingAgent):
         score = 0.
@@ -498,3 +493,71 @@ class GridWorld(SimulationEnvironment):
             )
         self._terminate = True
 
+    def _receive_add_graph_edge(self, msg):
+        self.log.debug(f'Received add-graph edge msg: {msg}')
+        self._current_graph.add_edge(u_of_edge=msg['from'], v_of_edge=msg['to'])
+
+    def _receive_remove_graph_edge(self, msg):
+        self.log.debug(f'Received remove-graph edge msg: {msg}')
+        self._current_graph.remove_edge(msg['from'], msg['to'])
+        self._current_graph.remove_edge(msg['to'], msg['from'])
+
+    def _copy_current_graph(self):
+        self._previous_graph = copy.deepcopy(self._current_graph)
+
+    def _write_metrics_file_header(self, headers):
+        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics'), exist_ok=True)
+        file = os.path.join(ROOT_DIR, 'simulation_metrics', self._metrics_file_name)
+        with open(file, mode='w', encoding='utf-8', newline='') as f:
+            csvwriter = csv.writer(f)
+            csvwriter.writerow(headers)
+        self._metrics_file_headers = headers
+
+    def _add_metrics_csv_line(self, ts_metrics: dict):
+        data = [ts_metrics[c] for c in self._metrics_file_headers]
+        file = os.path.join(ROOT_DIR, 'simulation_metrics', self._metrics_file_name)
+        with open(file, mode='a', encoding='utf-8', newline='\n') as f:
+            csvwriter = csv.writer(f)
+            csvwriter.writerow(data)
+
+    def _record_simulation_metrics(self):
+        self._metrics[self._current_time_step] = defaultdict(int)
+        ts_metrics = self._metrics[self._current_time_step]
+        ts_metrics['timestep'] = self._current_time_step
+        ts_metrics['score'] = self.calculate_global_score()
+
+        # update all metrics
+        for record in self._delayed_actions.values():
+            for metric, val in record['metrics'].items():
+                ts_metrics[metric] += val
+
+        # graph metrics
+        if self._previous_graph is None:
+            ts_metrics['edit distance'] = 0
+        else:
+            ts_metrics['edit distance'] = nx.graph_edit_distance(self._previous_graph, self._current_graph)
+        self._copy_current_graph()
+        ts_metrics['num components'] = nx.number_connected_components(self._current_graph)
+        ts_metrics['num nodes'] = nx.number_of_nodes(self._current_graph)
+
+        # save metrics to file
+        if not self._metrics_file_headers:
+            self._write_metrics_file_header(list(ts_metrics.keys()))
+        self._add_metrics_csv_line(ts_metrics)
+
+        # save grid info to file
+        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', 'grids'), exist_ok=True)
+        grid_info = self._state_history[-1]
+        with open(os.path.join(
+                ROOT_DIR,
+                'simulation_metrics/grids',
+                f'grid-{self._current_time_step}.txt'
+        ), 'w') as f:
+            f.write(str(grid_info))
+
+        # save graph info to file
+        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', 'graphs'), exist_ok=True)
+        nx.write_adjlist(
+            self._current_graph,
+            os.path.join(ROOT_DIR, f'simulation_metrics/graphs/{self._current_time_step}.adjlist')
+        )
