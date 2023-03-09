@@ -478,7 +478,6 @@ class AgentMetrics:
         else:
             message = kwargs['body']
         message = json.loads(message)
-        self.log.debug(f'metrics intercepted {message}')
 
         ignored_messages = [
             messaging.AGENT_REGISTRATION_DASHBOARD,

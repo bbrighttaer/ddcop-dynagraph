@@ -122,6 +122,17 @@ class DynaGraph:
                 )
                 self.state = State.ACTIVE
 
+            # send announce response ignored messages
+            for a in set(self.announceResponseList):
+                if a != selected_agent:
+                    self.channel.basic_publish(
+                        exchange=messaging.COMM_EXCHANGE,
+                        routing_key=f'{messaging.AGENTS_CHANNEL}.{a}',
+                        body=messaging.create_announce_ignored_message({
+                            'agent_id': self.agent.agent_id,
+                        })
+                    )
+
             self.announceResponseList.clear()
         else:
             self.log.debug('not announcing')
@@ -379,7 +390,7 @@ class DynaGraph:
         self._report_agent_disconnection(agent)
 
     def receive_announce_ignored(self, message):
-        sender = message["agent_id"]
+        sender = message['payload']['agent_id']
         self._ignored_ann_msgs.append(sender)
         self.log.info(f'Received announce ignored message from {sender}')
 

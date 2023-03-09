@@ -87,9 +87,9 @@ class GridCell:
 
 class MobileSensingAgent:
 
-    def __init__(self, player_id, cell):
+    def __init__(self, agent_id, cell):
         super().__init__()
-        self.player_id = player_id
+        self.agent_id = agent_id
         self.current_cell = cell
         self.credibility = 5
         self.sensing_range = 1
@@ -97,10 +97,11 @@ class MobileSensingAgent:
         self.communication_range = 3
 
     def __str__(self):
-        return f'Agent(id={self.player_id}, cred={self.credibility})'
+        # return f'Agent(id={self.player_id}, cred={self.credibility})'
+        return self.agent_id
 
     def __hash__(self):
-        return hash(self.player_id)
+        return hash(self.agent_id)
 
 
 class Target:
@@ -113,7 +114,8 @@ class Target:
         self.is_detected = False
 
     def __str__(self):
-        return f'Target(target_id={self.target_id}, cov_req={self.coverage_requirement}, is_active={self.is_active})'
+        # return f'Target(target_id={self.target_id}, cov_req={self.coverage_requirement}, is_active={self.is_active})'
+        return str(self.target_id)
 
     def __hash__(self):
         return hash(self.target_id)
@@ -278,7 +280,7 @@ class GridWorld(SimulationEnvironment):
 
         # create agent in the environment
         msa = MobileSensingAgent(agent, selected_cell)
-        self.agents[msa.player_id] = msa
+        self.agents[msa.agent_id] = msa
 
         # add sensor to cell
         selected_cell.add(msa)
@@ -350,8 +352,8 @@ class GridWorld(SimulationEnvironment):
         for cell in cells_to_inspect:
             if cell:
                 for obj in cell.contents:
-                    if isinstance(obj, MobileSensingAgent) and obj.player_id != agent_id:
-                        nearby_agents.append(obj.player_id)
+                    if isinstance(obj, MobileSensingAgent) and obj.agent_id != agent_id:
+                        nearby_agents.append(obj.agent_id)
 
         return nearby_agents
 
@@ -499,8 +501,8 @@ class GridWorld(SimulationEnvironment):
 
     def _receive_remove_graph_edge(self, msg):
         self.log.debug(f'Received remove-graph edge msg: {msg}')
-        self._current_graph.remove_edge(msg['from'], msg['to'])
-        self._current_graph.remove_edge(msg['to'], msg['from'])
+        if self._current_graph.has_edge(msg['from'], msg['to']):
+            self._current_graph.remove_edge(msg['from'], msg['to'])
 
     def _copy_current_graph(self):
         self._previous_graph = copy.deepcopy(self._current_graph)
