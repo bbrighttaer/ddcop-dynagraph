@@ -196,7 +196,7 @@ class Agent:
     def shutdown(self):
         self.terminate = True
         self.report_shutdown = True
-        self.metrics.update_metrics()
+        # self.metrics.update_metrics()
 
     def send_report(self):
         try:

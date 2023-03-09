@@ -27,6 +27,7 @@
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
+import random
 from typing import List
 
 from mascoord.src.envs.simple_repr import SimpleRepr
@@ -109,8 +110,12 @@ class Scenario(SimpleRepr):
     def events(self):
         return list(self._events)
 
-    def add_event(self, evt: DcopEvent):
-        self._events.append(evt)
+    def add_event(self, evt: DcopEvent, remove_offset: int = None):
+        if remove_offset is None:
+            self._events.append(evt)
+        else:
+            index = random.randint(remove_offset + 1, len(self._events))
+            self._events = self._events[:index] + [evt] + self._events[index:]
 
 
 class MSTScenario:
@@ -125,13 +130,28 @@ class MSTScenario:
     def scenario(self) -> Scenario:
         scenario = Scenario()
 
+        add_agents = []
+        remove_agents = []
+
         # construct events
         for i in range(self._num_add_agents):
+            agent = f'a{i}'
             scenario.add_event(
                 evt=DcopEvent(
                     id=str(len(scenario)),
-                    actions=[EventAction(type='add-agent', agent=f'a{i}')]
+                    actions=[EventAction(type='add-agent', agent=agent)]
                 )
+            )
+            add_agents.append(agent)
+
+        for i in range(self._num_remove_agents):
+            agent = random.choice(list(set(add_agents) - set(remove_agents)))
+            scenario.add_event(
+                evt=DcopEvent(
+                    id=str(len(scenario)),
+                    actions=[EventAction(type='remove-agent', agent=agent)]
+                ),
+                remove_offset=add_agents.index(agent),
             )
 
         return scenario

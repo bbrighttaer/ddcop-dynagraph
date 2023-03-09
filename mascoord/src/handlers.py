@@ -325,6 +325,20 @@ def agent_added_handler(msg):
 def agent_removed_handler(msg):
     log.info(f'Received agent removed message: {msg}')
 
+    selected_id = msg['payload']['agent']
+    selected_agent = agents[selected_id]
+
+    if selected_id and selected_agent:
+        log.info(f'Removing agent {selected_agent}')
+
+        selected_agent.shutdown()
+        agent_id_to_thread[selected_id].join()
+        terminated_agents.append(selected_agent)
+
+        log.info(f'Removed agent {selected_agent}')
+    else:
+        log.info('No agent selected to be removed')
+
 
 class MetricsTable:
 

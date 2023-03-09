@@ -299,6 +299,9 @@ class GridWorld(SimulationEnvironment):
         # remove node from current graph
         self._current_graph.remove_node(agent)
 
+        # remove from registered agents
+        self._registered_agents.remove(agent)
+
     def next_time_step(self):
         self._disable_detected_targets()
         self._current_time_step += 1
