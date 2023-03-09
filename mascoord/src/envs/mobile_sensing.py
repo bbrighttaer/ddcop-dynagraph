@@ -79,7 +79,11 @@ class GridCell:
         return str(self.i + 1) + '-' + str(self.j + 1)
 
     def __str__(self):
-        return f'{self.cell_id}: {str([str(c) for c in self.contents])}'
+        contents = []
+        for c in self.contents:
+            if isinstance(c, Target) and c.is_active or isinstance(c, MobileSensingAgent):
+                contents.append(str(c))
+        return f'{self.cell_id}: {str(contents)}'
 
     def __hash__(self):
         return hash(self.cell_id)
@@ -115,7 +119,7 @@ class Target:
 
     def __str__(self):
         # return f'Target(target_id={self.target_id}, cov_req={self.coverage_requirement}, is_active={self.is_active})'
-        return str(self.target_id)
+        return 't' + str(self.target_id)
 
     def __hash__(self):
         return hash(self.target_id)
@@ -127,6 +131,7 @@ class GridWorld(SimulationEnvironment):
 
     def __init__(self, size, num_targets, scenario=None):
         super(GridWorld, self).__init__(self.name, time_step_delay=10, scenario=scenario)
+        self.log.info(f'Number of scenarios: {len(scenario)}')
         self._delayed_actions = {}
         self.grid_size = size
         # self.grid = {}
@@ -313,6 +318,10 @@ class GridWorld(SimulationEnvironment):
         for agent in self._registered_agents:
             self._send_time_step_info(agent)
 
+        # when next-time-step is called but there are no agents
+        if len(self.agents) == 0:
+            self._receive_value_selection({}, is_forced=True)
+
     def _create_cells(self):
         for i in range(1, self.grid_size + 1):
             for j in range(1, self.grid_size + 1):
@@ -415,11 +424,13 @@ class GridWorld(SimulationEnvironment):
 
         return score
 
-    def _receive_value_selection(self, msg):
+    def _receive_value_selection(self, msg, is_forced=False):
         self.log.info(f'Received action selection: {msg}')
-        self._delayed_actions[msg['agent_id']] = msg
 
-        if len(self._delayed_actions) == len(self.agents):
+        if not is_forced:
+            self._delayed_actions[msg['agent_id']] = msg
+
+        if len(self._delayed_actions) == len(self.agents) or is_forced:
             self.log.info('Collecting simulation metrics...')
             # apply selected actions
             self._apply_all_actions()
