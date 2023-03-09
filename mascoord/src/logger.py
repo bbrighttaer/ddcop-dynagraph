@@ -14,15 +14,15 @@ def get_logger(name, prefix=None):
         else:
             prefix = ''
 
-        os.makedirs('../logs/', exist_ok=True)
+        # os.makedirs('../logs/', exist_ok=True)
         logger = logging.getLogger(name)
         logger.setLevel(config.shared_config.logger_level)
 
         # create handlers
         c_handler = logging.StreamHandler()
-        f_handler = logging.FileHandler(f'logs/{name}.log', mode='w')
+        f_handler = logging.FileHandler(f'logs.log', mode='w')
         c_handler.setLevel(logging.DEBUG)
-        f_handler.setLevel(logging.INFO)
+        f_handler.setLevel(logging.DEBUG)
 
         # create formatters
         c_format = logging.Formatter(f'[%(asctime)s] {prefix}%(name)s - %(levelname)s - %(message)s')

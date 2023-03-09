@@ -19,7 +19,6 @@ log = logger.get_logger('Runner')
 
 def on_message(ch, method, properties, body):
     msg = eval(body.decode('utf-8'))
-    from mascoord import handlers
     func = handlers.directory.get(msg['type'], None)
 
     if func:
@@ -154,7 +153,7 @@ class Runner:
         )
 
         # start sim environment
-        self.sim_env()
+        threading.Thread(target=self.sim_env).start()
 
     def _on_dynamic_sim_env_ended(self):
         self._terminate = True

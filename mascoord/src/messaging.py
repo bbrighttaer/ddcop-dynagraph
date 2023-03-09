@@ -32,6 +32,7 @@ DCOP_DONE = 'DCOP_DONE'
 # agent channel message types
 ANNOUNCE = 'ANNOUNCE_MSG'
 ANNOUNCE_RESPONSE = 'ANNOUNCE_RESPONSE_MSG'
+ANNOUNCE_IGNORED = 'ANNOUNCE_IGNORED_MSG'
 ADD_ME = 'ADD_ME'
 CHILD_ADDED = 'CHILD_ADDED'
 PARENT_ASSIGNED = 'PARENT_ASSIGNED'
@@ -65,6 +66,9 @@ REQUEST_UTIL_MESSAGE = 'RequestUtilMessage'
 # Sim environment message
 AGENT_ADDED = 'AGENT_ADDED'
 AGENT_REMOVED = 'AGENT_REMOVED'
+SIM_ENV_CURRENT_TIME_STEP_MSG = 'SIM_ENV_CURRENT_TIME_STEP_MSG'
+VALUE_SELECTED_MSG = 'VALUE_SELECTED_MSG'
+STOP_AGENT = 'STOP_AGENT'
 
 
 def _create_msg(msg_type, data):
@@ -193,3 +197,19 @@ def create_agent_added_message(data):
 
 def create_agent_removed_message(data):
     return _create_msg(AGENT_REMOVED, data)
+
+
+def create_sim_env_current_time_step_message(data):
+    return _create_msg(SIM_ENV_CURRENT_TIME_STEP_MSG, data)
+
+
+def create_value_selected_message(data):
+    return _create_msg(VALUE_SELECTED_MSG, data)
+
+
+def create_stop_agent_message(data):
+    return _create_msg(STOP_AGENT, data)
+
+
+def create_announce_ignored_message(data):
+    return _create_msg(ANNOUNCE_IGNORED, data)

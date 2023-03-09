@@ -1,3 +1,4 @@
+import threading
 from typing import Tuple
 
 import pika
@@ -9,14 +10,17 @@ class SimulationEnvironment(object):
     """
     Base class for all simulation environments used for D-DCOP
     """
+    agents = {}
+    log = None
 
     def __init__(self, name, time_step_delay, scenario):
+        self._terminate = False
         self.log = logger.get_logger(name)
         self.name = name
         self._events_iterator = iter(scenario) if scenario else None
         self._state_history = []
         self.time_step_delay = time_step_delay
-        self.agents = {}
+        # self.agents = {}
 
         # communication props
         self.queue_name = 'sim-env-queue'
@@ -44,6 +48,10 @@ class SimulationEnvironment(object):
         msg = eval(body.decode('utf-8'))
         print(msg, ch, method, properties, body)
 
+    def _listen_for_messages(self):
+        while not self._terminate:
+            self.client.sleep(0)
+
     def step(self):
         ...
 
@@ -51,7 +59,7 @@ class SimulationEnvironment(object):
         self._events_iterator = iter(scenario) if scenario else None
 
     def display(self):
-        log.info(str(self))
+        self.log.info(str(self))
 
     @property
     def history(self):
@@ -72,10 +80,7 @@ class SimulationEnvironment(object):
     def next_time_step(self):
         ...
 
-    def get_time_step_end_data(self, agent_id):
-        ...
-
-    def evaluate_constraint(self):
+    def get_time_step_data(self, agent_id):
         ...
 
     def get_agents_in_communication_range(self, agent_id):
@@ -93,14 +98,14 @@ class SimulationEnvironment(object):
         """
         raise NotImplementedError('Global score logic is missing')
 
-    def on_action_selection(self, on_action_cb, sender: str, msg: 'ValueChangeMessage', t: float):
+    def on_action_selection(self, msg):
         """
         Applies selected value in the environment.
         """
         ...
 
     def _record_simulation_metrics(self):
-        ...
+        val = self.calculate_global_score()
 
 
 class TimeStep:

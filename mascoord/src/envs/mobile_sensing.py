@@ -1,3 +1,4 @@
+import functools
 import random
 import threading
 from collections import defaultdict
@@ -7,6 +8,7 @@ import numpy as np
 
 from mascoord.src import messaging
 from mascoord.src.envs import SimulationEnvironment
+from mascoord.src.messaging import ANNOUNCE, AGENT_REGISTRATION, VALUE_SELECTED_MSG
 
 
 class GridCell:
@@ -116,12 +118,13 @@ class Target:
 
 class GridWorld(SimulationEnvironment):
     name = 'GridWorld'
+    grid = {}
 
     def __init__(self, size, num_targets, scenario=None):
         super(GridWorld, self).__init__(self.name, time_step_delay=10, scenario=scenario)
         self._delayed_actions = {}
         self.grid_size = size
-        self.grid = {}
+        # self.grid = {}
         self._current_time_step = -1
         self.num_targets = num_targets
         self._targets = {}
@@ -134,13 +137,23 @@ class GridWorld(SimulationEnvironment):
         self._transition_function = m / m.sum(axis=1).reshape(-1, 1)
         self.scores = defaultdict(float)
 
+        self._registered_agents = []
+
+        self._handlers = {
+            AGENT_REGISTRATION: self._received_agent_registration,
+            ANNOUNCE: self._received_announce_msg,
+            VALUE_SELECTED_MSG: self.on_action_selection,
+        }
+
     def __call__(self, *args, **kwargs):
         self.log.info('Started GridWorld simulation environment')
         self._create_cells()
         self._initialize_targets()
 
         # start processing events in scenario object
-        threading.Thread(target=self.step, daemon=True).start()
+        self.step()
+
+        self._listen_for_messages()
 
     def _initialize_targets(self):
         # get all possible positions
@@ -162,72 +175,108 @@ class GridWorld(SimulationEnvironment):
             self._targets[target.target_id] = target
             selected_cell.add(target)
 
+    def _on_message(self, ch, method, properties, body):
+        msg = eval(body.decode('utf-8'))
+        func = self._handlers.get(msg['type'], None)
+
+        if func:
+            func(msg['payload'])
+        else:
+            self.log.warning(f'Message type {msg["type"]} has no handler')
+
+    def _received_agent_registration(self, msg):
+        self.log.info(f'Received agent registration: {msg}')
+        agent_id = msg['agent_id']
+        self._registered_agents.append(agent_id)
+
+        # send current time step info to the just registered agent
+        self._send_time_step_info(agent_id)
+
+    def _send_time_step_info(self, agent_id):
+        self.log.info(f'Sending time step info to agent {agent_id}')
+        self.channel.basic_publish(
+            exchange=messaging.COMM_EXCHANGE,
+            routing_key=f'{messaging.AGENTS_CHANNEL}.{agent_id}',
+            body=messaging.create_sim_env_current_time_step_message(
+                self.get_time_step_data(agent_id),
+            )
+        )
+
+    def _received_announce_msg(self, msg):
+        self.log.info(f'Received announce message: {msg}')
+        self._broadcast_announce(msg)
+        self.client.call_later(0, functools.partial(self._broadcast_announce, msg))
+
+    def _broadcast_announce(self, msg):
+        for agent in self.get_agents_in_communication_range(msg['agent_id']):
+            self.channel.basic_publish(
+                exchange=messaging.COMM_EXCHANGE,
+                routing_key=f'{messaging.AGENTS_CHANNEL}.{agent}',
+                body=messaging.create_announce_message(msg)
+            )
+
     def on_stop(self):
         self.log.debug('Stopped GridWorld simulation environment')
 
     def step(self):
-        self.log.info(f'Processing scenarios for {self.name}')
-        while True:
-            try:
+        try:
+            evt = next(self._events_iterator)
+            while evt.is_delay:
+                self.log.info('Skipping delay event')
                 evt = next(self._events_iterator)
-                while evt.is_delay:
-                    self.log.info('Skipping delay event')
-                    evt = next(self._events_iterator)
 
-                for a in evt.actions:
-                    if a.type == 'add-agent':
-                        self.log.info('Event action: Adding agent %s ', a)
-                        self.run_stabilization_computation(a.args['agent'])
+            for a in evt.actions:
+                if a.type == 'add-agent':
+                    self.log.info('Event action: Adding agent %s ', a)
+                    self.run_stabilization_computation(a.args['agent'])
 
-                        # self.post_msg(
-                        #     ORCHESTRATOR_MGT,
-                        #     GraphConnectionMessage(
-                        #         action='add-node',
-                        #         node1=a.args['agent'],
-                        #         node2=None,
-                        #     ),
-                        #     MSG_MGT,
-                        # )
+                    # self.post_msg(
+                    #     ORCHESTRATOR_MGT,
+                    #     GraphConnectionMessage(
+                    #         action='add-node',
+                    #         node1=a.args['agent'],
+                    #         node2=None,
+                    #     ),
+                    #     MSG_MGT,
+                    # )
 
-                        # send message to factory
-                        self.channel.basic_publish(
-                            exchange=messaging.COMM_EXCHANGE,
-                            routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}',
-                            body=messaging.create_agent_added_message({
-                                'added-agent': a.args['agent'],
-                            })
-                        )
+                    # send message to factory
+                    self.channel.basic_publish(
+                        exchange=messaging.COMM_EXCHANGE,
+                        routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}',
+                        body=messaging.create_agent_added_message({
+                            'agent': a.args['agent'],
+                        })
+                    )
 
-                    elif a.type == 'remove-agent':
-                        self.log.info('Event action: Remove agent %s ', a)
-                        self.remove_agent(a.args['agent'])
+                elif a.type == 'remove-agent':
+                    self.log.info('Event action: Remove agent %s ', a)
+                    self.remove_agent(a.args['agent'])
 
-                        # send message to factory
-                        self.channel.basic_publish(
-                            exchange=messaging.COMM_EXCHANGE,
-                            routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}',
-                            body=messaging.create_agent_removed_message({
-                                'removed-agent': a.args['agent'],
-                            })
-                        )
+                    # send message to factory
+                    self.channel.basic_publish(
+                        exchange=messaging.COMM_EXCHANGE,
+                        routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}',
+                        body=messaging.create_agent_removed_message({
+                            'agent': a.args['agent'],
+                        })
+                    )
 
-                        # self.post_msg(
-                        #     ORCHESTRATOR_MGT,
-                        #     GraphConnectionMessage(
-                        #         action='remove_node',
-                        #         node1=a.args['agent'],
-                        #         node2=None,
-                        #     ),
-                        #     MSG_MGT,
-                        # )
+                    # self.post_msg(
+                    #     ORCHESTRATOR_MGT,
+                    #     GraphConnectionMessage(
+                    #         action='remove_node',
+                    #         node1=a.args['agent'],
+                    #         node2=None,
+                    #     ),
+                    #     MSG_MGT,
+                    # )
 
-                self.next_time_step()
-                self.log.debug(self.history)
+            self.next_time_step()
+            self.log.debug(self.history)
 
-            except StopIteration:
-                break
-
-        self.on_simulation_ended()
+        except StopIteration:
+            self.on_simulation_ended()
 
     def run_stabilization_computation(self, agent):
         # get all possible positions
@@ -259,17 +308,21 @@ class GridWorld(SimulationEnvironment):
         self._state_history.append((f't={str(self._current_time_step)}', grid))
         self.log.info(f'Current time step: {self._current_time_step}')
 
+        # send time step information to agents
+        for agent in self._registered_agents:
+            self._send_time_step_info(agent)
+
     def _create_cells(self):
         for i in range(1, self.grid_size + 1):
             for j in range(1, self.grid_size + 1):
                 cell = GridCell(i, j)
                 self.grid[cell.cell_id] = cell
 
-    def get_time_step_end_data(self, agent_id):
+    def get_time_step_data(self, agent_id):
         sensor = self.agents.get(agent_id, None)
         return {
             'current_position': sensor.current_cell.cell_id,
-            'score': self.calc_agent_score(self.agents[agent_id]),  # score in the just ended time step
+            # 'score': self.calc_agent_score(self.agents[agent_id]),  # score in the just ended time step
             'agents_in_comm_range': [] if sensor is None else self.get_agents_in_communication_range(agent_id),
             'agent_domain': self._get_legit_actions(self.agents[agent_id].current_cell),
             'neighbor_domains': {
@@ -327,23 +380,20 @@ class GridWorld(SimulationEnvironment):
                 actions.append('right_down')
         return actions
 
-    def _on_constraint_evaluation_msg(self, sender: str, msg, t: float):
-        # self.log.debug(f'Received constraint evaluation msg: {msg} from {sender}')
-
+    @classmethod
+    def constraint_evaluation(cls, sender: str, agent_values: dict):
         selected_cells = {}
         score = 0.
 
-        for k, val in msg.var_assignments.items():
+        for k, val in agent_values.items():
             try:
-                if k.startswith('var'):
-                    k = k.replace('var', 'a')
-                    current_cell = self.agents[k].current_cell
-                    action = getattr(current_cell, val)
-                    cell = self.grid.get(action(), None)
-                    if cell:
-                        selected_cells[k] = cell
+                current_cell = cls.agents[k].current_cell
+                action = getattr(current_cell, val)
+                cell = cls.grid.get(action(), None)
+                if cell:
+                    selected_cells[k] = cell
             except KeyError as e:
-                self.log.error(f'_on_constraint_evaluation_msg: {str(e)} - sender={sender}, msg = {msg}')
+                cls.log.error(f'constraint_evaluation: {str(e)} - sender={sender}, msg = {agent_values}')
 
         if len(selected_cells) > 1:
             unique_cells = list(set(selected_cells.values()))
@@ -361,25 +411,30 @@ class GridWorld(SimulationEnvironment):
         elif len(selected_cells) == 1:
             # self.log.debug('single cell')
             score = list(selected_cells.values())[0].get_num_active_targets() * 0.5
-        # self.log.debug(f'score = {score}')
-        # send constraint evaluation result to computation (sender)
-        self.send_constraint_evaluation_response(
-            target=sender,
-            constraint_name=msg.constraint_name,
-            value=score,
-        )
 
-    def on_action_selection(self, on_action_cb, sender: str, msg, t: float):
-        self.log.info(f'Received action selection from {sender}: {msg}')
-        self._delayed_actions[sender] = (sender, msg.agent, msg.value, on_action_cb)
+        return score
+
+    def on_action_selection(self, msg):
+        self.log.info(f'Received action selection: {msg}')
+        self._delayed_actions[msg['agent_id']] = msg
 
         if len(self._delayed_actions) == len(self.agents):
             self.log.info('Collecting simulation metrics...')
+            # apply selected actions
+            self._apply_all_actions()
+
+            # gather simulation metrics
             self._record_simulation_metrics()
+
+            # clear time step registers
+            self._delayed_actions.clear()
+
+            # move environment to new time step
+            self.step()
         else:
             self.log.debug(f'delayed actions: {self._delayed_actions}, agents = {self.agents}')
 
-    def _apply_selected_action(self, sender, agent, value, on_action_cb):
+    def _apply_selected_action(self, agent, value):
         # apply action
         agt = self.agents[agent]
         current_agt_cell = agt.current_cell
@@ -392,29 +447,19 @@ class GridWorld(SimulationEnvironment):
                 new_cell.contents.append(agt)
                 self.log.debug(f'Agent {agent} changed from {current_agt_cell.cell_id} to {new_cell.cell_id}')
 
-                if callable(on_action_cb):
-                    on_action_cb(
-                        target=sender,
-                        prev_position=current_agt_cell.cell_id,
-                        new_position=new_cell.cell_id,
-                        updated_domain=self._get_legit_actions(new_cell),
-                        current_position=new_cell.cell_id,
-                    )
-
-    def calculate_global_score(self) -> Tuple[int, float]:  # number of violations, score
+    def calculate_global_score(self) -> float:  # number of violations, score
         self.log.debug('Calculating global score')
-        self._apply_all_actions()
         score = 0.
         for agt in self.agents:
             score += self.calc_agent_score(self.agents[agt])
         self._mark_detected_targets()
-        return 0, score
+        return score
 
     def _apply_all_actions(self):
         # apply all actions
         self.log.info(f'Applying actions: num of actions = {len(self._delayed_actions)}, num_agents: {len(self.agents)}')
-        for sender, agent, value, on_action_cb in self._delayed_actions.values():
-            self._apply_selected_action(sender, agent, value, on_action_cb)
+        for msg in self._delayed_actions.values():
+            self._apply_selected_action(agent=msg['agent_id'], value=msg['value'])
         self._delayed_actions.clear()
 
     def calc_agent_score(self, agent: MobileSensingAgent):
@@ -443,3 +488,13 @@ class GridWorld(SimulationEnvironment):
             for c in self.agents[agt].current_cell.contents:
                 if isinstance(c, Target):
                     c.is_detected = True
+
+    def on_simulation_ended(self):
+        for agent in self.agents:
+            self.channel.basic_publish(
+                exchange=messaging.COMM_EXCHANGE,
+                routing_key=f'{messaging.AGENTS_CHANNEL}.{agent}',
+                body=messaging.create_stop_agent_message({})
+            )
+        self._terminate = True
+

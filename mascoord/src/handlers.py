@@ -11,7 +11,11 @@ import config
 import logger
 import messaging
 import utils
-from mascoord.src.algorithms.dcop import DCOP, CSDPOP
+from mascoord.src.algorithms.dcop import DCOP
+from mascoord.src.algorithms.dcop.ccocoa import CCoCoA
+from mascoord.src.algorithms.dcop.cocoa import CoCoA
+from mascoord.src.algorithms.dcop.csdpop import CSDPOP
+from mascoord.src.algorithms.dcop.sdpop import SDPOP
 
 agents = {}
 terminated_agents = []
@@ -84,10 +88,10 @@ def create_and_start_agent(agent_id):
 
 
 def set_dcop_algorithm(alg):
-    from mascoord.src.algorithms.dcop import CCoCoA, SDPOP
     global dcop_algorithm
 
     dcop_algorithm = {
+        'cocoa': CoCoA,
         'c-cocoa': CCoCoA,
         'sdpop': SDPOP,
         'c-sdpop': CSDPOP,
@@ -313,6 +317,15 @@ def current_datetime():
     return datetime.datetime.now().strftime('%m-%d-%Y-%H-%M-%S')
 
 
+def agent_added_handler(msg):
+    log.info(f'Received agent added message: {msg}')
+    _spawn_agent(msg['payload']['agent'])
+
+
+def agent_removed_handler(msg):
+    log.info(f'Received agent removed message: {msg}')
+
+
 class MetricsTable:
 
     def __init__(self):
@@ -440,6 +453,9 @@ directory = {
     messaging.PLAY_SIMULATION: play_simulation_handler,
     messaging.SAVE_METRICS: save_simulation_metrics_handler,
     messaging.DCOP_DONE: dcop_done_handler,
+
+    messaging.AGENT_ADDED: agent_added_handler,
+    messaging.AGENT_REMOVED: agent_removed_handler,
 }
 
 metrics = MetricsTable()

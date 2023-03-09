@@ -1,4 +1,5 @@
 import enum
+import random
 
 from mascoord.src import messaging
 from mascoord.src.config import MAX_PING_COUNT
@@ -25,6 +26,7 @@ class DynaGraph:
         self.pinged_list_dict = {}
         self.state = State.INACTIVE
         self.announceResponseList = []
+        self._ignored_ann_msgs = []
 
     def has_no_neighbors(self):
         return not self.parent and not self.children
@@ -37,6 +39,9 @@ class DynaGraph:
 
     def is_parent(self, agent_id):
         return self.parent == agent_id
+
+    def on_time_step_changed(self):
+        self._ignored_ann_msgs.clear()
 
     @property
     def neighbors(self):
@@ -66,16 +71,33 @@ class DynaGraph:
                                        'constraint': str(constraint),
                                    }))
 
+    def _has_potential_neighbors(self):
+        if self.agent.agents_in_comm_range:
+            for _agt in self.agent.agents_in_comm_range:
+                if _agt < self.agent.agent_id:
+                    return True
+
+        return False
+
     def connect(self):
-        if self.state == State.INACTIVE and not self.parent:
+        if self._has_potential_neighbors() and self.state == State.INACTIVE and not self.parent:
             self.log.debug(f'Publishing Announce message...')
 
             # publish Announce message
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.AGENTS_CHANNEL}.public',
-                                       body=messaging.create_announce_message({
-                                           'agent_id': self.agent.agent_id,
-                                       }))
+            self.channel.basic_publish(
+                exchange=messaging.COMM_EXCHANGE,
+                routing_key=f'{messaging.SIM_ENV_CHANNEL}',
+                body=messaging.create_announce_message({
+                    'agent_id': self.agent.agent_id,
+                })
+            )
+            # self.channel.basic_publish(
+            #     exchange=messaging.COMM_EXCHANGE,
+            #     routing_key=f'{messaging.AGENTS_CHANNEL}.public',
+            #     body=messaging.create_announce_message({
+            #         'agent_id': self.agent.agent_id,
+            #     })
+            # )
 
             # wait to receive responses
             self.agent.listen_to_network()
@@ -84,10 +106,14 @@ class DynaGraph:
 
             # select agent to connect to
             selected_agent = None
-            for agent in self.announceResponseList:
-                if agent < int(self.agent.agent_id):
-                    selected_agent = agent
-                    break
+            if self.announceResponseList:
+                selected_agent = random.choice(self.announceResponseList)
+
+            # for agent in self.announceResponseList:
+            #     if agent < int(self.agent.agent_id):
+            #         selected_agent = agent
+            #         break
+
             if selected_agent is not None:
                 self.log.debug(f'Selected agent for AddMe: {selected_agent}')
                 self._send_to_agent(
@@ -97,12 +123,14 @@ class DynaGraph:
                 self.state = State.ACTIVE
 
             self.announceResponseList.clear()
+        else:
+            self.log.debug('not announcing')
 
     def receive_announce(self, message):
         self.log.debug(f'Received announce: {message}')
         sender = message['payload']['agent_id']
 
-        if self.state == State.INACTIVE and int(self.agent.agent_id) < int(sender):
+        if self.state == State.INACTIVE and self.agent.agent_id < sender:
             self._send_to_agent(
                 body=messaging.create_announce_response_message({'agent_id': self.agent.agent_id}),
                 to=sender,
@@ -113,7 +141,7 @@ class DynaGraph:
         sender = message['payload']['agent_id']
 
         if self.state == State.INACTIVE:
-            self.announceResponseList.append(int(sender))
+            self.announceResponseList.append(sender)
             self.log.debug(f'AnnounceResponse list: {self.announceResponseList}')
 
     def receive_add_me(self, message):
@@ -186,9 +214,14 @@ class DynaGraph:
     def ping_neighbors(self):
         for agent in self.neighbors:
             if agent not in self.pinged_list_dict:
-                self._send_to_agent(
-                    body=messaging.create_ping_message({'agent_id': self.agent.agent_id}),
-                    to=agent,
+                # self._send_to_agent(
+                #     body=messaging.create_ping_message({'agent_id': self.agent.agent_id}),
+                #     to=agent,
+                # )
+                self.channel.basic_publish(
+                    exchange=messaging.COMM_EXCHANGE,
+                    routing_key=f'{messaging.SIM_ENV_CHANNEL}',
+                    body=messaging.create_ping_message({'agent_id': self.agent.agent_id, 'recipient': agent})
                 )
                 self.pinged_list_dict[agent] = 1
             else:
@@ -298,4 +331,22 @@ class DynaGraph:
 
         self.log.debug('Constraint changed')
 
+    def remove_agent(self, agent):
+        if self.parent == agent:
+            self.state = State.INACTIVE
+            self.parent = None
+            self.agent.cpa.clear()
+            self.agent.initialize_announce_call_exp_decay()  # so that Announce msgs can be published faster
+        else:
+            self.children.remove(agent)
 
+        self.agent.agent_disconnection_callback(agent)
+        self._report_agent_disconnection(agent)
+
+    def receive_announce_ignored(self, message):
+        sender = message["agent_id"]
+        self._ignored_ann_msgs.append(sender)
+        self.log.info(f'Received announce ignored message from {sender}')
+
+        if len(set(self._ignored_ann_msgs)) == len(self.agent.agents_in_comm_range):
+            self.agent.execute_dcop()

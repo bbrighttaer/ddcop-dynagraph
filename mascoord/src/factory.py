@@ -33,7 +33,7 @@ if __name__ == '__main__':
         dest='algs',
         type=str,
         nargs='+',
-        choices=['c-cocoa', 'sdpop', 'c-sdpop', 'no-dcop'],
+        choices=['cocoa', 'c-cocoa', 'sdpop', 'c-sdpop', 'no-dcop'],
         default=['no-dcop'],
         help='The DCOP algorithm to be used with the Dynamic Graph algorithm',
     )
@@ -179,7 +179,7 @@ if __name__ == '__main__':
 
     elif command == 'mst-simulation':
         config.shared_config.execution_mode = DYNAMIC_SIM_ENV
-        handlers.set_dcop_algorithm('c-cocoa')
+        handlers.set_dcop_algorithm('cocoa')
         runner = Runner(args)
         signal.signal(signal.SIGINT, functools.partial(_on_force_exit, runner.on_force_exit))
         runner.start_simulation_environment(args)

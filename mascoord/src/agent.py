@@ -87,6 +87,10 @@ class Agent:
         self.ping_msg_resp_count = 0
         self.constraint_changed_count = 0
 
+        self.agents_in_comm_range = None
+        self._num_new_agents = 0
+        self._num_connect_calls = 0
+
         self.client = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=config.BROKER_URL,
@@ -105,9 +109,9 @@ class Agent:
         self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
                                 queue=self.queue,
                                 routing_key=f'{messaging.AGENTS_CHANNEL}.public.#')
-        self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
-                                queue=self.queue,
-                                routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#')
+        # self.channel.queue_bind(exchange=messaging.COMM_EXCHANGE,
+        #                         queue=self.queue,
+        #                         routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#')
 
         self.channel.basic_consume(queue=self.queue,
                                    on_message_callback=create_on_message(self.log,
@@ -210,13 +214,14 @@ class Agent:
             self.log.info(f'Agent state report failed, retry: {str(e)}')
 
     def report_metrics(self):
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.METRICS_CHANNEL}',
-                                   body=messaging.create_metrics_report({
-                                       'agent_id': self.agent_id,
-                                       'cost': float(self.cost),
-                                       'num_messages': self.messages_count,
-                                   }))
+        self.channel.basic_publish(
+            exchange=messaging.COMM_EXCHANGE,
+            routing_key=f'{messaging.METRICS_CHANNEL}',
+            body=messaging.create_metrics_report({
+                'agent_id': self.agent_id,
+                'cost': float(self.cost),
+                'num_messages': self.messages_count,
+            }))
 
     def _start_time(self):
         self.start_time = time.time()
@@ -287,83 +292,94 @@ class Agent:
 
         match message['type']:
             case messaging.ANNOUNCE:
-                self.graph.receive_announce(message)
-                # self.increment_messages_count()
-                self.announce_msg_count += 1
+                self.client.call_later(0, functools.partial(self.graph.receive_announce, message))
 
             case messaging.ANNOUNCE_RESPONSE:
                 self.graph.receive_announce_response(message)
-                # self.increment_messages_count()
-                self.announce_res_msg_count += 1
+
+            case messaging.ANNOUNCE_IGNORED:
+                self.graph.receive_announce_ignored(message)
 
             case messaging.ADD_ME:
                 self.graph.receive_add_me(message)
-                self.increment_messages_count()
-                self.add_me_count += 1
 
             case messaging.CHILD_ADDED:
                 self.graph.receive_child_added(message)
-                self.increment_messages_count()
-                self.child_added_count += 1
 
             case messaging.PARENT_ASSIGNED:
                 self.graph.receive_parent_assigned(message)
-                self.increment_messages_count()
-                self.parent_assigned_count += 1
 
             case messaging.ALREADY_ACTIVE:
                 self.graph.receive_already_active(message)
-                self.increment_messages_count()
-                self.already_active_count += 1
 
             case messaging.PING:
                 self.graph.receive_ping_message(message)
-                # self.increment_messages_count()
-                self.ping_msg_count += 1
 
             case messaging.PING_RESPONSE:
                 self.graph.receive_ping_response_message(message)
-                # self.increment_messages_count()
-                self.ping_msg_resp_count += 1
 
             case messaging.CONSTRAINT_CHANGED:
                 self.graph.receive_constraint_changed_message(message)
-                self.increment_messages_count()
-                self.constraint_changed_count += 1
 
             # C-CoCoA message handling
             case messaging.UPDATE_STATE_MESSAGE:
                 self.dcop.receive_update_state_message(message)
-                self.increment_messages_count()
 
             case messaging.INQUIRY_MESSAGE:
                 self.dcop.receive_inquiry_message(message)
-                self.increment_messages_count()
 
             case messaging.COST_MESSAGE:
                 self.dcop.receive_cost_message(message)
-                self.increment_messages_count()
 
             # SDPOP/C-SDPOP message handling
             case messaging.VALUE_MESSAGE:
                 self.dcop.receive_value_message(message)
-                self.increment_messages_count()
 
             case messaging.UTIL_MESSAGE:
                 self.dcop.receive_util_message(message)
-                self.increment_messages_count()
 
             case messaging.REQUEST_UTIL_MESSAGE:
                 self.dcop.receive_util_message_request(message)
-                self.increment_messages_count()
+
+            case messaging.SIM_ENV_CURRENT_TIME_STEP_MSG:
+                self._receive_time_step_message(message)
+
+            case messaging.STOP_AGENT:
+                self.terminate = True
 
             case _:
                 self.log.info(f'Could not handle received payload: {message}')
 
+    def _receive_time_step_message(self, message):
+        self.log.info(f'Received time step message: {message}')
+        self.dcop.domain = message['payload']['agent_domain']
+        self.agents_in_comm_range = message['payload']['agents_in_comm_range']
+
+        self.dcop.on_time_step_changed()
+        self.graph.on_time_step_changed()
+
+        # remove agents that are out-of-range
+        agents_to_remove = set(self.graph.neighbors) - set(self.agents_in_comm_range)
+        if agents_to_remove:
+            for _agent in agents_to_remove:
+                self.graph.remove_agent(_agent)
+
+        self._num_new_agents = len(set(self.agents_in_comm_range) - set(self.graph.neighbors))
+        self._num_connect_calls = 0
+
+        # if no connection exists or could happen (agent is alone)
+        if len(self.agents_in_comm_range) == 0:
+            self.dcop.select_random_value()
+
+        # if all agents in range are already children then start DCOP
+        if self.has_neighbor and set(self.agents_in_comm_range) == set(self.graph.children):
+            self.execute_dcop()
+
     def __call__(self, *args, **kwargs):
         self.log.info('Initializing...')
-        self.metrics.update_metrics()
+        # self.metrics.update_metrics()
 
+        # register with graph-ui and sim env
         self.register_agent()
 
         last_ping_call_time = None
@@ -371,19 +387,19 @@ class Agent:
         while not self.terminate:
             self.listen_to_network()
 
-            if random.random() < self.connect_exp_decay():
+            if self._num_connect_calls < self._num_new_agents:
                 self.graph.connect()
-                self.num_connect_calls += 1
+                self._num_connect_calls += 1
 
             self.dcop.resolve_value()
 
             # check if neighbors should be pinged
-            if not last_ping_call_time or datetime.datetime.now() > last_ping_call_time \
-                    + datetime.timedelta(seconds=config.PING_PROC_CALL_DELAY_IN_SECONDS):
-                self.graph.ping_neighbors()
-                self.listen_to_network()
-
-                last_ping_call_time = datetime.datetime.now()
+            # if not last_ping_call_time or datetime.datetime.now() > last_ping_call_time \
+            #         + datetime.timedelta(seconds=config.PING_PROC_CALL_DELAY_IN_SECONDS):
+            #     self.graph.ping_neighbors()
+            #     self.listen_to_network()
+            #
+            #     last_ping_call_time = datetime.datetime.now()
 
         self.log.info('Shutting down...')
 
@@ -391,30 +407,40 @@ class Agent:
 
     def listen_to_network(self):
         self._time_lapse()
+        self.log.info('listening...')
         self.client.sleep(config.AGENT_COMM_TIMEOUT_IN_SECONDS)
         self._start_time()
 
     def release_resources(self):
         if self.report_shutdown:
             # inform dashboard
-            self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                       routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                       body=messaging.create_agent_shutdown_message({
-                                           'agent_id': self.agent_id,
-                                       }))
+            self.channel.basic_publish(
+                exchange=messaging.COMM_EXCHANGE,
+                routing_key=f'{messaging.MONITORING_CHANNEL}',
+                body=messaging.create_agent_shutdown_message({
+                    'agent_id': self.agent_id,
+                })
+            )
         # remove rabbitmq resources
-        self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
-                                  queue=self.queue,
-                                  routing_key=f'{messaging.AGENTS_CHANNEL}.{self.agent_id}.#')
-        self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
-                                  queue=self.queue,
-                                  routing_key=f'{messaging.AGENTS_CHANNEL}.public.#')
-        self.channel.queue_unbind(exchange=messaging.COMM_EXCHANGE,
-                                  queue=self.queue,
-                                  routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#')
+        self.channel.queue_unbind(
+            exchange=messaging.COMM_EXCHANGE,
+            queue=self.queue,
+            routing_key=f'{messaging.AGENTS_CHANNEL}.{self.agent_id}.#'
+        )
+        self.channel.queue_unbind(
+            exchange=messaging.COMM_EXCHANGE,
+            queue=self.queue,
+            routing_key=f'{messaging.AGENTS_CHANNEL}.public.#'
+        )
+        # self.channel.queue_unbind(
+        #     exchange=messaging.COMM_EXCHANGE,
+        #     queue=self.queue,
+        #     routing_key=f'{messaging.FACTORY_COMMAND_CHANNEL}.#'
+        # )
         self.channel.queue_delete(self.queue)
         self.channel.close()
         self.client.close()
+        self.log.info('Channel closed')
 
     def register_agent(self):
         # register with dashboard
@@ -433,10 +459,25 @@ class Agent:
             )
         )
 
+        # register with sim environment
+        self.channel.basic_publish(
+            exchange=messaging.COMM_EXCHANGE,
+            routing_key=f'{messaging.SIM_ENV_CHANNEL}',
+            body=bytes(
+                json.dumps({
+                    'type': messaging.AGENT_REGISTRATION,
+                    'payload': {
+                        'agent_id': self.agent_id,
+                    },
+                    'timestamp': datetime.datetime.now().timestamp(),
+                }),
+                'utf-8'
+            )
+        )
+
     def connect_exp_decay(self):
         rate = self.initial_rate * math.exp(-self.decay_rate * self.num_connect_calls)
         return rate
 
     def __str__(self) -> str:
         return self.agent_id
-
