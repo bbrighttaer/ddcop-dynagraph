@@ -292,6 +292,6 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-simulation_metrics/
+simulation_metrics*/
 
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm+all,pycharm+iml

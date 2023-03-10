@@ -110,12 +110,8 @@ class Scenario(SimpleRepr):
     def events(self):
         return list(self._events)
 
-    def add_event(self, evt: DcopEvent, remove_offset: int = None):
-        if remove_offset is None:
-            self._events.append(evt)
-        else:
-            index = random.randint(remove_offset + 1, len(self._events))
-            self._events = self._events[:index] + [evt] + self._events[index:]
+    def add_event(self, evt: DcopEvent):
+        self._events.append(evt)
 
 
 class MSTScenario:
@@ -134,24 +130,27 @@ class MSTScenario:
         remove_agents = []
 
         # construct events
-        for i in range(self._num_add_agents):
-            agent = f'a{i}'
-            scenario.add_event(
-                evt=DcopEvent(
-                    id=str(len(scenario)),
-                    actions=[EventAction(type='add-agent', agent=agent)]
+        i = 0
+        while len(scenario) < self._num_add_agents + self._num_remove_agents:
+            available = list(set(add_agents) - set(remove_agents))
+            if available and len(remove_agents) < self._num_remove_agents and random.random() < 0.5:
+                agent = random.choice(available)
+                scenario.add_event(
+                    evt=DcopEvent(
+                        id=str(len(scenario)),
+                        actions=[EventAction(type='remove-agent', agent=agent)]
+                    )
                 )
-            )
-            add_agents.append(agent)
-
-        for i in range(self._num_remove_agents):
-            agent = random.choice(list(set(add_agents) - set(remove_agents)))
-            scenario.add_event(
-                evt=DcopEvent(
-                    id=str(len(scenario)),
-                    actions=[EventAction(type='remove-agent', agent=agent)]
-                ),
-                remove_offset=add_agents.index(agent),
-            )
+                remove_agents.append(agent)
+            elif len(add_agents) < self._num_add_agents:
+                agent = f'a{i}'
+                scenario.add_event(
+                    evt=DcopEvent(
+                        id=str(len(scenario)),
+                        actions=[EventAction(type='add-agent', agent=agent)]
+                    )
+                )
+                add_agents.append(agent)
+                i += 1
 
         return scenario

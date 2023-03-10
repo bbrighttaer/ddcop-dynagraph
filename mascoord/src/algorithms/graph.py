@@ -71,16 +71,15 @@ class DynaGraph:
                                        'constraint': str(constraint),
                                    }))
 
-    def _has_potential_neighbors(self):
-        if self.agent.agents_in_comm_range:
-            for _agt in self.agent.agents_in_comm_range:
-                if _agt < self.agent.agent_id:
-                    return True
+    def has_potential_neighbors(self):
+        for _agt in self.agent.agents_in_comm_range:
+            if int(_agt.replace('a', '')) < int(self.agent.agent_id.replace('a', '')):
+                return True
 
         return False
 
     def connect(self):
-        if self._has_potential_neighbors() and self.state == State.INACTIVE and not self.parent:
+        if self.has_potential_neighbors() and self.state == State.INACTIVE and not self.parent:
             self.log.debug(f'Publishing Announce message...')
 
             # publish Announce message
@@ -135,13 +134,13 @@ class DynaGraph:
 
             self.announceResponseList.clear()
         else:
-            self.log.debug('not announcing')
+            self.log.debug(f'Not announcing, state={self.state}')
 
     def receive_announce(self, message):
         self.log.debug(f'Received announce: {message}')
         sender = message['payload']['agent_id']
 
-        if self.state == State.INACTIVE and self.agent.agent_id < sender:
+        if self.state == State.INACTIVE and int(self.agent.agent_id.replace('a', '')) < int(sender.replace('a', '')):
             self._send_to_agent(
                 body=messaging.create_announce_response_message({'agent_id': self.agent.agent_id}),
                 to=sender,
@@ -394,5 +393,6 @@ class DynaGraph:
         self._ignored_ann_msgs.append(sender)
         self.log.info(f'Received announce ignored message from {sender}')
 
-        if len(set(self._ignored_ann_msgs)) == len(self.agent.agents_in_comm_range):
+        new_agents = set(self.agent.agents_in_comm_range) - set(self.neighbors)
+        if len(set(self._ignored_ann_msgs)) == len(new_agents):
             self.agent.execute_dcop()

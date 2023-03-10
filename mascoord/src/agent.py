@@ -359,6 +359,8 @@ class Agent:
             for _agent in agents_to_remove:
                 self.graph.remove_agent(_agent)
 
+        self.log.info(f'parent={self.parent}, children={self.children}, agents-in-range={self.agents_in_comm_range}')
+
         self._num_new_agents = len(set(self.agents_in_comm_range) - set(self.graph.neighbors))
         self._num_connect_calls = 0
 

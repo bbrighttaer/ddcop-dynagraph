@@ -270,7 +270,7 @@ class GridWorld(SimulationEnvironment):
                     )
 
             self.next_time_step()
-            self.log.debug(self.history)
+            # self.log.debug(self.history)
 
         except StopIteration:
             self.on_simulation_ended()
@@ -444,7 +444,7 @@ class GridWorld(SimulationEnvironment):
             # move environment to new time step
             self.step()
         else:
-            self.log.debug(f'delayed actions: {self._delayed_actions}, agents = {self.agents}')
+            self.log.debug(f'delayed actions: {self._delayed_actions.keys()}, agents = {self.agents.keys()}')
 
     def _apply_selected_action(self, agent, value):
         # apply action
