@@ -26,7 +26,8 @@ class DynaGraph:
         self.pinged_list_dict = {}
         self.state = State.INACTIVE
         self.announceResponseList = []
-        self._ignored_ann_msgs = []
+        self._ignored_ann_msgs = {}
+        self._parent_already_assigned_msgs = {}
 
     def has_no_neighbors(self):
         return not self.parent and not self.children
@@ -42,6 +43,7 @@ class DynaGraph:
 
     def on_time_step_changed(self):
         self._ignored_ann_msgs.clear()
+        self._parent_already_assigned_msgs.clear()
 
     @property
     def neighbors(self):
@@ -71,15 +73,22 @@ class DynaGraph:
                                        'constraint': str(constraint),
                                    }))
 
-    def has_potential_neighbors(self):
-        for _agt in self.agent.agents_in_comm_range:
+    def has_potential_parent(self):
+        for _agt in set(self.agent.new_agents) - set(self.neighbors):
             if int(_agt.replace('a', '')) < int(self.agent.agent_id.replace('a', '')):
                 return True
 
         return False
 
+    def has_potential_child(self):
+        for _agt in set(self.agent.new_agents) - set(self.neighbors):
+            if int(_agt.replace('a', '')) > int(self.agent.agent_id.replace('a', '')):
+                return True
+
+        return False
+
     def connect(self):
-        if self.has_potential_neighbors() and self.state == State.INACTIVE and not self.parent:
+        if not self.parent and self.has_potential_parent() and self.state == State.INACTIVE:
             self.log.debug(f'Publishing Announce message...')
 
             # publish Announce message
@@ -127,12 +136,23 @@ class DynaGraph:
                     self.channel.basic_publish(
                         exchange=messaging.COMM_EXCHANGE,
                         routing_key=f'{messaging.AGENTS_CHANNEL}.{a}',
-                        body=messaging.create_announce_ignored_message({
+                        body=messaging.create_announce_response_ignored_message({
                             'agent_id': self.agent.agent_id,
                         })
                     )
 
             self.announceResponseList.clear()
+
+        elif self.has_potential_child():
+            for a in self._get_potential_children():
+                self.channel.basic_publish(
+                    exchange=messaging.COMM_EXCHANGE,
+                    routing_key=f'{messaging.AGENTS_CHANNEL}.{a}',
+                    body=messaging.create_parent_available_message({
+                        'agent_id': self.agent.agent_id,
+                    })
+                )
+
         else:
             self.log.debug(f'Not announcing, state={self.state}')
 
@@ -388,11 +408,38 @@ class DynaGraph:
         self.agent.agent_disconnection_callback(agent)
         self._report_agent_disconnection(agent)
 
-    def receive_announce_ignored(self, message):
+    def receive_announce_response_ignored(self, message):
         sender = message['payload']['agent_id']
-        self._ignored_ann_msgs.append(sender)
+        self._ignored_ann_msgs[sender] = message
         self.log.info(f'Received announce ignored message from {sender}')
 
-        new_agents = set(self.agent.agents_in_comm_range) - set(self.neighbors)
-        if len(set(self._ignored_ann_msgs)) == len(new_agents):
+        if len(set(self._ignored_ann_msgs)) == len(self._get_potential_children()) and not self.agent.value:
             self.agent.execute_dcop()
+
+    def receive_parent_available_message(self, message):
+        self.log.info(f'Received parent available message: {message}')
+        if self.parent:
+            sender = message['payload']['agent_id']
+            self.channel.basic_publish(
+                exchange=messaging.COMM_EXCHANGE,
+                routing_key=f'{messaging.AGENTS_CHANNEL}.{sender}',
+                body=messaging.create_parent_already_assigned_message({
+                    'agent_id': self.agent.agent_id,
+                })
+            )
+
+    def receive_parent_already_assigned(self, message):
+        sender = message['payload']['agent_id']
+        self._parent_already_assigned_msgs[sender] = message
+        self.log.info(f'Received parent already assigned message from {sender}')
+
+        if len(set(self._parent_already_assigned_msgs)) == len(self._get_potential_children()) and not self.agent.value:
+            self.agent.execute_dcop()
+
+    def _get_potential_children(self):
+        agents = []
+        for _agt in set(self.agent.new_agents) - set(self.neighbors):
+            if int(_agt.replace('a', '')) > int(self.agent.agent_id.replace('a', '')):
+                agents.append(_agt)
+
+        return agents

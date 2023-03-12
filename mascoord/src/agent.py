@@ -77,7 +77,7 @@ class Agent:
         self.agent_metrics = AgentMetrics(self.agent_id, self.log)
 
         self.agents_in_comm_range = None
-        self._num_new_agents = 0
+        self.new_agents = set()
         self._num_connect_calls = 0
 
         self.client = pika.BlockingConnection(
@@ -292,8 +292,8 @@ class Agent:
             case messaging.ANNOUNCE_RESPONSE:
                 self.graph.receive_announce_response(message)
 
-            case messaging.ANNOUNCE_IGNORED:
-                self.graph.receive_announce_ignored(message)
+            case messaging.ANNOUNCE_RESPONSE_IGNORED:
+                self.graph.receive_announce_response_ignored(message)
 
             case messaging.ADD_ME:
                 self.graph.receive_add_me(message)
@@ -342,6 +342,12 @@ class Agent:
             case messaging.STOP_AGENT:
                 self.terminate = True
 
+            case messaging.PARENT_AVAILABLE:
+                self.graph.receive_parent_available_message(message)
+
+            case messaging.PARENT_ALREADY_ASSIGNED:
+                self.graph.receive_parent_already_assigned(message)
+
             case _:
                 self.log.info(f'Could not handle received payload: {message}')
 
@@ -349,6 +355,8 @@ class Agent:
         self.log.info(f'Received time step message: {message}')
         self.dcop.domain = message['payload']['agent_domain']
         self.agents_in_comm_range = message['payload']['agents_in_comm_range']
+        self.new_agents = set(self.agents_in_comm_range) - set(self.graph.neighbors)
+        self._num_connect_calls = 0
 
         self.dcop.on_time_step_changed()
         self.graph.on_time_step_changed()
@@ -360,9 +368,6 @@ class Agent:
                 self.graph.remove_agent(_agent)
 
         self.log.info(f'parent={self.parent}, children={self.children}, agents-in-range={self.agents_in_comm_range}')
-
-        self._num_new_agents = len(set(self.agents_in_comm_range) - set(self.graph.neighbors))
-        self._num_connect_calls = 0
 
         # if no connection exists or could happen (agent is alone)
         if len(self.agents_in_comm_range) == 0:
@@ -384,7 +389,7 @@ class Agent:
         while not self.terminate:
             self.listen_to_network()
 
-            if self._num_connect_calls < self._num_new_agents:
+            if self._num_connect_calls < len(self.new_agents):
                 self.graph.connect()
                 self._num_connect_calls += 1
 

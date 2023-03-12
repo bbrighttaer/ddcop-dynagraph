@@ -32,7 +32,7 @@ DCOP_DONE = 'DCOP_DONE'
 # agent channel message types
 ANNOUNCE = 'ANNOUNCE_MSG'
 ANNOUNCE_RESPONSE = 'ANNOUNCE_RESPONSE_MSG'
-ANNOUNCE_IGNORED = 'ANNOUNCE_IGNORED_MSG'
+ANNOUNCE_RESPONSE_IGNORED = 'ANNOUNCE_IGNORED_MSG'
 ADD_ME = 'ADD_ME'
 CHILD_ADDED = 'CHILD_ADDED'
 PARENT_ASSIGNED = 'PARENT_ASSIGNED'
@@ -40,6 +40,8 @@ ALREADY_ACTIVE = 'ALREADY_ACTIVE'
 PING = 'PING'
 PING_RESPONSE = 'PING_RESPONSE'
 CONSTRAINT_CHANGED = 'CONSTRAINT_CHANGED'
+PARENT_AVAILABLE = 'PARENT_AVAILABLE'
+PARENT_ALREADY_ASSIGNED = 'PARENT_ALREADY_ASSIGNED'
 
 # monitor channel message types
 AGENT_CONNECTION_MSG = 'AGENT_CONNECTION_MSG'
@@ -214,8 +216,8 @@ def create_stop_agent_message(data):
     return _create_msg(STOP_AGENT, data)
 
 
-def create_announce_ignored_message(data):
-    return _create_msg(ANNOUNCE_IGNORED, data)
+def create_announce_response_ignored_message(data):
+    return _create_msg(ANNOUNCE_RESPONSE_IGNORED, data)
 
 
 def create_agent_registration_message(data):
@@ -232,3 +234,11 @@ def create_add_graph_edge_message(data):
 
 def create_remove_graph_edge_message(data):
     return _create_msg(REMOVE_GRAPH_EDGE, data)
+
+
+def create_parent_available_message(data):
+    return _create_msg(PARENT_AVAILABLE, data)
+
+
+def create_parent_already_assigned_message(data):
+    return _create_msg(PARENT_ALREADY_ASSIGNED, data)
