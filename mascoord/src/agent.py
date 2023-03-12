@@ -389,9 +389,7 @@ class Agent:
         while not self.terminate:
             self.listen_to_network()
 
-            if self._num_connect_calls < len(self.new_agents):
-                self.graph.connect()
-                self._num_connect_calls += 1
+            self.graph.connect()
 
             self.dcop.resolve_value()
 

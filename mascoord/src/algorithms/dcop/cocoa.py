@@ -73,7 +73,11 @@ class CoCoA(DCOP):
                         }
                     }
         self.log.info(f'Total cost dict: {total_cost_dict}')
-        self.value = min(total_cost_dict, key=lambda d: total_cost_dict[d]['cost'])
+        if config.shared_config.optimization_op == 'max':
+            op = max
+        else:
+            op = min
+        self.value = op(total_cost_dict, key=lambda d: total_cost_dict[d]['cost'])
         best_params = total_cost_dict[self.value]['params']
         self.log.info(f'Best params: {best_params}, {self.value}')
 

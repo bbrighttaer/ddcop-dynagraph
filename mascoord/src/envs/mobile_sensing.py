@@ -392,7 +392,7 @@ class GridWorld(SimulationEnvironment):
 
     @classmethod
     def constraint_evaluation(cls, sender: str, agent_values: dict):
-        selected_cells = {}
+        selected_cells = []
         score = 0.
 
         for k, val in agent_values.items():
@@ -401,26 +401,23 @@ class GridWorld(SimulationEnvironment):
                 action = getattr(current_cell, val)
                 cell = cls.grid.get(action(), None)
                 if cell:
-                    selected_cells[k] = cell
+                    selected_cells.append(cell)
             except KeyError as e:
                 cls.log.error(f'constraint_evaluation: {str(e)} - sender={sender}, msg = {agent_values}')
 
         if len(selected_cells) > 1:
-            unique_cells = list(set(selected_cells.values()))
+            unique_cells = list(set(selected_cells))
 
             if len(unique_cells) == 1:
-                # self.log.debug('unique cells')
                 score = unique_cells[0].get_num_active_targets() * 2
 
             elif len(unique_cells) > 1:
-                # self.log.debug('multiple cells')
                 score = 0
-                for cell in selected_cells.values():
+                for cell in selected_cells:
                     score += cell.get_num_active_targets() * 0.5
 
         elif len(selected_cells) == 1:
-            # self.log.debug('single cell')
-            score = list(selected_cells.values())[0].get_num_active_targets() * 0.5
+            score = selected_cells[0].get_num_active_targets() * 0.5
 
         return score
 
@@ -462,8 +459,8 @@ class GridWorld(SimulationEnvironment):
     def calculate_global_score(self) -> float:  # number of violations, score
         self.log.debug('Calculating global score')
         score = 0.
-        for agt in self.agents:
-            score += self.calc_agent_score(self.agents[agt])
+        for cell in self.grid.values():
+            score += self._calculate_cell_score(cell)
         self._mark_detected_targets()
         return score
 
@@ -474,10 +471,13 @@ class GridWorld(SimulationEnvironment):
             self._apply_selected_action(agent=msg['agent_id'], value=msg['value'])
 
     def calc_agent_score(self, agent: MobileSensingAgent):
-        score = 0.
-        num_agents_in_cell = agent.current_cell.get_num_agents()
-        num_targets_in_cell = agent.current_cell.get_num_active_targets()
+        return self._calculate_cell_score(agent.current_cell)
 
+    def _calculate_cell_score(self, cell: GridCell):
+        num_agents_in_cell = cell.get_num_agents()
+        num_targets_in_cell = cell.get_num_active_targets()
+
+        score = 0.
         if num_agents_in_cell > 1:
             score = num_targets_in_cell * 2.
         elif num_agents_in_cell == 1:

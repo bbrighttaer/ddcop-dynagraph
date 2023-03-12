@@ -51,6 +51,13 @@ if __name__ == '__main__':
         default='debug',
         dest='logger_level',
     )
+    parser.add_argument(
+        '-p',
+        '--opt_op',
+        choices=['min', 'max'],
+        default='min',
+        dest='opt_op',
+    )
 
     subparsers = parser.add_subparsers(
         title='Execution modes',
@@ -141,6 +148,7 @@ if __name__ == '__main__':
     command = args.command
     config.shared_config.execution_mode = command
     config.shared_config.logger_level = args.logger_level.upper()
+    config.shared_config.optimization_op = args.opt_op
 
     if command == 'graph-gen':
         handlers.set_dcop_algorithm('no-dcop')

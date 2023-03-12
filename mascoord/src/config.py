@@ -24,6 +24,7 @@ class SharedConfig:
         self.use_predefined_graph = False
         self.max_out_degree = float('inf')
         self.execution_mode = None
+        self.optimization_op = 'max'
         self.logger_level = 'DEBUG'
 
 
