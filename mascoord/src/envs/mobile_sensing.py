@@ -13,6 +13,31 @@ from mascoord.src import messaging
 from mascoord.src.envs import SimulationEnvironment
 from mascoord.src.messaging import ANNOUNCE, AGENT_REGISTRATION, VALUE_SELECTED_MSG, ADD_GRAPH_EDGE, REMOVE_GRAPH_EDGE
 
+METRICS_HEADERS = [
+    'timestep',
+    'score',
+    'messages_count',
+    'edit distance',
+    'num components',
+    'num nodes',
+    messaging.AGENT_REGISTRATION,
+    messaging.ANNOUNCE,
+    messaging.ANNOUNCE_RESPONSE,
+    messaging.ANNOUNCE_RESPONSE_IGNORED,
+    messaging.ADD_ME,
+    messaging.CHILD_ADDED,
+    messaging.PARENT_ASSIGNED,
+    messaging.PARENT_AVAILABLE,
+    messaging.PARENT_ALREADY_ASSIGNED,
+    messaging.ALREADY_ACTIVE,
+    messaging.PING,
+    messaging.PING_RESPONSE,
+    messaging.CONSTRAINT_CHANGED,
+    messaging.UPDATE_STATE_MESSAGE,
+    messaging.INQUIRY_MESSAGE,
+    messaging.COST_MESSAGE,
+]
+
 
 class GridCell:
     """
@@ -166,6 +191,9 @@ class GridWorld(SimulationEnvironment):
         self.log.info('Started GridWorld simulation environment')
         self._create_cells()
         self._initialize_targets()
+
+        # initialize metrics file
+        self._write_metrics_file_header(METRICS_HEADERS)
 
         # start processing events in scenario object
         self.step()
@@ -466,7 +494,8 @@ class GridWorld(SimulationEnvironment):
 
     def _apply_all_actions(self):
         # apply all actions
-        self.log.info(f'Applying actions: num of actions = {len(self._delayed_actions)}, num_agents: {len(self.agents)}')
+        self.log.info(
+            f'Applying actions: num of actions = {len(self._delayed_actions)}, num_agents: {len(self.agents)}')
         for msg in self._delayed_actions.values():
             self._apply_selected_action(agent=msg['agent_id'], value=msg['value'])
 
@@ -530,7 +559,7 @@ class GridWorld(SimulationEnvironment):
         self._metrics_file_headers = headers
 
     def _add_metrics_csv_line(self, ts_metrics: dict):
-        data = [ts_metrics[c] for c in self._metrics_file_headers]
+        data = [ts_metrics.get(c, 0) for c in METRICS_HEADERS]
         file = os.path.join(ROOT_DIR, 'simulation_metrics', self._metrics_file_name)
         with open(file, mode='a', encoding='utf-8', newline='\n') as f:
             csvwriter = csv.writer(f)
@@ -557,8 +586,6 @@ class GridWorld(SimulationEnvironment):
         ts_metrics['num nodes'] = nx.number_of_nodes(self._current_graph)
 
         # save metrics to file
-        if not self._metrics_file_headers:
-            self._write_metrics_file_header(list(ts_metrics.keys()))
         self._add_metrics_csv_line(ts_metrics)
 
         # save grid info to file
