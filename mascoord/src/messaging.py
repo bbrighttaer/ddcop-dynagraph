@@ -74,6 +74,11 @@ VALUE_SELECTED_MSG = 'VALUE_SELECTED_MSG'
 STOP_AGENT = 'STOP_AGENT'
 ADD_GRAPH_EDGE = 'ADD_GRAPH_EDGE'
 REMOVE_GRAPH_EDGE = 'REMOVE_GRAPH_EDGE'
+DDFS_NEIGHBOR_DATA = 'DDFS_NEIGHBOR_DATA'
+DDFS_VALUE_MSG = 'DDFS_VALUE_MSG'
+DDFS_POSITION_MSG = 'DDFS_POSITION_MSG'
+DDFS_CHILD_MSG = 'DDFS_CHILD_MSG'
+DDFS_PSEUDO_CHILD_MSG = 'DDFS_PSEUDO_CHILD_MSG'
 
 
 def _create_msg(msg_type, data):
@@ -242,3 +247,27 @@ def create_parent_available_message(data):
 
 def create_parent_already_assigned_message(data):
     return _create_msg(PARENT_ALREADY_ASSIGNED, data)
+
+
+def create_neighbor_data_message(data):
+    return _create_msg(DDFS_NEIGHBOR_DATA, data)
+
+
+def create_ddfs_value_message(data):
+    return _create_msg(DDFS_VALUE_MSG, data)
+
+
+def create_ddfs_position_message(data):
+    return _create_msg(DDFS_POSITION_MSG, data)
+
+
+def create_ddfs_child_message(data):
+    return _create_msg(DDFS_CHILD_MSG, data)
+
+
+def create_ddfs_pseudo_child_message(data):
+    return _create_msg(DDFS_PSEUDO_CHILD_MSG, data)
+
+
+def create_ddfs_pseudo_parent_message(data):
+    return _create_msg(DDFS_PSEUDO_PARENT_MSG, data)

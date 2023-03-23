@@ -1,8 +1,10 @@
-import enum
 import random
 
 from mascoord.src import messaging
+from mascoord.src.algorithms.graphs.base import DynaGraph, get_agent_order
 from mascoord.src.config import MAX_PING_COUNT
+
+import enum
 
 
 class State(enum.Enum):
@@ -10,82 +12,22 @@ class State(enum.Enum):
     INACTIVE = enum.auto()
 
 
-class DynaGraph:
+class DIGCA(DynaGraph):
     """
     Implementation of the Dynamic Interaction Graph Construction algorithm
     """
 
     def __init__(self, agent):
-        self.agent = agent
-        self.channel = self.agent.channel
-        self.parent = None
-        self.children = []
-        self.children_history = {}
-        self.log = self.agent.log
-        self.client = agent.client
+        super(DIGCA, self).__init__(agent)
         self.pinged_list_dict = {}
         self.state = State.INACTIVE
         self.announceResponseList = []
         self._ignored_ann_msgs = {}
         self._parent_already_assigned_msgs = {}
 
-    def has_no_neighbors(self):
-        return not self.parent and not self.children
-
-    def is_neighbor(self, agent_id):
-        return self.parent == agent_id or agent_id in self.children
-
-    def is_child(self, agent_id):
-        return agent_id in self.children
-
-    def is_parent(self, agent_id):
-        return self.parent == agent_id
-
     def on_time_step_changed(self):
         self._ignored_ann_msgs.clear()
         self._parent_already_assigned_msgs.clear()
-
-    @property
-    def neighbors(self):
-        neighbors = []
-        if self.children:
-            neighbors.extend(self.children)
-        if self.parent:
-            neighbors.append(self.parent)
-        return neighbors
-
-    def _start_dcop(self):
-        self.log.debug(f'Starting DCOP...')
-        self.agent.execute_dcop()
-
-    def _send_to_agent(self, body, to):
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.AGENTS_CHANNEL}.{to}',
-                                   body=body)
-
-    def _report_connection(self, parent, child, constraint):
-        self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
-                                   routing_key=f'{messaging.MONITORING_CHANNEL}',
-                                   body=messaging.create_agent_connection_message({
-                                       'agent_id': self.agent.agent_id,
-                                       'child': child,
-                                       'parent': parent,
-                                       'constraint': str(constraint),
-                                   }))
-
-    def has_potential_parent(self):
-        for _agt in set(self.agent.new_agents) - set(self.neighbors):
-            if int(_agt.replace('a', '')) < int(self.agent.agent_id.replace('a', '')):
-                return True
-
-        return False
-
-    def has_potential_child(self):
-        for _agt in set(self.agent.new_agents) - set(self.neighbors):
-            if int(_agt.replace('a', '')) > int(self.agent.agent_id.replace('a', '')):
-                return True
-
-        return False
 
     def connect(self):
         if not self.parent and self.has_potential_parent() and self.state == State.INACTIVE:
@@ -124,7 +66,7 @@ class DynaGraph:
 
             if selected_agent is not None:
                 self.log.debug(f'Selected agent for AddMe: {selected_agent}')
-                self._send_to_agent(
+                self.send_to_agent(
                     body=messaging.create_add_me_message({'agent_id': self.agent.agent_id}),
                     to=selected_agent,
                 )
@@ -160,8 +102,8 @@ class DynaGraph:
         self.log.debug(f'Received announce: {message}')
         sender = message['payload']['agent_id']
 
-        if self.state == State.INACTIVE and int(self.agent.agent_id.replace('a', '')) < int(sender.replace('a', '')):
-            self._send_to_agent(
+        if self.state == State.INACTIVE and get_agent_order(self.agent.agent_id) < get_agent_order(sender):
+            self.send_to_agent(
                 body=messaging.create_announce_response_message({'agent_id': self.agent.agent_id}),
                 to=sender,
             )
@@ -188,7 +130,7 @@ class DynaGraph:
             self.agent.active_constraints[key] = constraint
             self.children.append(sender)
             self.children_history[sender] = constraint
-            self._send_to_agent(
+            self.send_to_agent(
                 body=messaging.create_child_added_message({
                     'agent_id': self.agent.agent_id,
                     'extra_args': self.agent.connection_extra_args,
@@ -209,10 +151,10 @@ class DynaGraph:
             )
 
             # inform dashboard about the connection
-            self._report_connection(parent=self.agent.agent_id, child=sender, constraint=constraint)
+            self.report_connection(parent=self.agent.agent_id, child=sender, constraint=constraint)
         else:
             self.log.debug(f'Rejected AddMe from agent: {sender}, sending AlreadyActive message')
-            self._send_to_agent(
+            self.send_to_agent(
                 body=messaging.create_already_active_message({'agent_id': self.agent.agent_id}),
                 to=sender,
             )
@@ -227,7 +169,7 @@ class DynaGraph:
             self.state = State.INACTIVE
             self.parent = sender
             self.agent.connection_extra_args_callback(sender, message['payload']['extra_args'])
-            self._send_to_agent(
+            self.send_to_agent(
                 body=messaging.create_parent_assigned_message({
                     'agent_id': self.agent.agent_id,
                     'extra_args': self.agent.connection_extra_args,
@@ -248,7 +190,7 @@ class DynaGraph:
             )
 
             if self.agent.graph_traversing_order == 'bottom-up':
-                self._start_dcop()
+                self.start_dcop()
 
     def receive_parent_assigned(self, message):
         self.log.debug(f'Received ParentAssigned: {message}')
@@ -257,7 +199,7 @@ class DynaGraph:
         self.agent.connection_extra_args_callback(sender, message['payload']['extra_args'])
 
         if self.agent.graph_traversing_order == 'top-down':
-            self._start_dcop()
+            self.start_dcop()
 
     def receive_already_active(self, message):
         self.log.debug(f'Received AlreadyActive: {message}')
@@ -288,7 +230,7 @@ class DynaGraph:
         sender = message['payload']['agent_id']
 
         if self.is_neighbor(sender):
-            self._send_to_agent(
+            self.send_to_agent(
                 body=messaging.create_ping_response_message({'agent_id': self.agent.agent_id}),
                 to=sender,
             )
@@ -326,34 +268,11 @@ class DynaGraph:
 
                 disconnected = True
                 self.agent.agent_disconnection_callback(agent)
-                self._report_agent_disconnection(agent)
+                self.report_agent_disconnection(agent)
                 self.pinged_list_dict.pop(agent)
 
         if disconnected:
-            self._start_dcop()
-
-    def _report_agent_disconnection(self, agent):
-        # inform dashboard about disconnection
-        self.channel.basic_publish(
-            exchange=messaging.COMM_EXCHANGE,
-            routing_key=f'{messaging.MONITORING_CHANNEL}',
-            body=messaging.create_agent_disconnection_message({
-                'agent_id': self.agent.agent_id,
-                'node1': self.agent.agent_id,
-                'node2': agent,
-            })
-        )
-
-        # update current graph
-        self.channel.basic_publish(
-            exchange=messaging.COMM_EXCHANGE,
-            routing_key=f'{messaging.SIM_ENV_CHANNEL}',
-            body=messaging.create_remove_graph_edge_message({
-                'agent_id': self.agent.agent_id,
-                'from': agent,
-                'to': self.agent.agent_id,
-            })
-        )
+            self.start_dcop()
 
     def change_constraint(self, coefficients, neighbor_id):
         # update constraint's coefficients (event injection)
@@ -362,7 +281,7 @@ class DynaGraph:
         self.agent.active_constraints[f'{self.agent.agent_id},{neighbor_id}'] = constraint
 
         # inform neighbor of constraint update
-        self._send_to_agent(
+        self.send_to_agent(
             body=messaging.create_constraint_changed_message({
                 'agent_id': self.agent.agent_id,
                 'coefficients': coefficients,
@@ -372,9 +291,9 @@ class DynaGraph:
 
         # check for DCOP initiation
         if self.agent.graph_traversing_order == 'top-down' and self.is_child(neighbor_id):  # parent node case
-            self._start_dcop()
+            self.start_dcop()
         elif self.agent.graph_traversing_order == 'bottom-up' and self.is_parent(neighbor_id):  # child node case
-            self._start_dcop()
+            self.start_dcop()
 
         self.agent.metrics.update_metrics()
 
@@ -390,9 +309,9 @@ class DynaGraph:
 
         # check for DCOP initiation
         if self.agent.graph_traversing_order == 'top-down' and self.is_child(sender):
-            self._start_dcop()
+            self.start_dcop()
         elif self.agent.graph_traversing_order == 'bottom-up' and self.is_parent(sender):
-            self._start_dcop()
+            self.start_dcop()
 
         self.log.debug('Constraint changed')
 
@@ -406,7 +325,7 @@ class DynaGraph:
             self.children.remove(agent)
 
         self.agent.agent_disconnection_callback(agent)
-        self._report_agent_disconnection(agent)
+        self.report_agent_disconnection(agent)
 
     def receive_announce_response_ignored(self, message):
         sender = message['payload']['agent_id']

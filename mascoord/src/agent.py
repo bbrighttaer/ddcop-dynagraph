@@ -12,8 +12,9 @@ import pika
 
 import config
 import logger
+import mascoord.src.algorithms.graphs
+import mascoord.src.algorithms.graphs.digca
 import messaging
-from algorithms import graph
 from mascoord.src.equations import Quadratic
 from mascoord.src.utils import time_diff, notify_wrap
 
@@ -117,7 +118,7 @@ class Agent:
         )
 
         # algorithms
-        self.graph = graph.DynaGraph(self)
+        self.graph = mascoord.src.algorithms.graphs.DDFS(self)
         self.dcop = dcop_algorithm(self, num_discrete_points=kwargs['domain_size'])
 
         self.report_shutdown = False
@@ -347,6 +348,21 @@ class Agent:
 
             case messaging.PARENT_ALREADY_ASSIGNED:
                 self.graph.receive_parent_already_assigned(message)
+
+            case messaging.DDFS_NEIGHBOR_DATA:
+                self.graph.receive_neighbor_data(message)
+
+            case messaging.DDFS_VALUE_MSG:
+                self.graph.receive_value_message(message)
+
+            case messaging.DDFS_POSITION_MSG:
+                self.graph.receive_position_msg(message)
+
+            case messaging.DDFS_CHILD_MSG:
+                self.graph.receive_child_msg(message)
+
+            case messaging.DDFS_PSEUDO_CHILD_MSG:
+                self.graph.receive_pseudo_child_msg(message)
 
             case _:
                 self.log.info(f'Could not handle received payload: {message}')

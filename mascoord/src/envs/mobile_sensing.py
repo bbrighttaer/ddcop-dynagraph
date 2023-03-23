@@ -11,7 +11,6 @@ import csv
 from mascoord.definitions import ROOT_DIR
 from mascoord.src import messaging
 from mascoord.src.envs import SimulationEnvironment
-from mascoord.src.messaging import ANNOUNCE, AGENT_REGISTRATION, VALUE_SELECTED_MSG, ADD_GRAPH_EDGE, REMOVE_GRAPH_EDGE
 
 METRICS_HEADERS = [
     'timestep',
@@ -36,6 +35,11 @@ METRICS_HEADERS = [
     messaging.UPDATE_STATE_MESSAGE,
     messaging.INQUIRY_MESSAGE,
     messaging.COST_MESSAGE,
+    messaging.DDFS_NEIGHBOR_DATA,
+    messaging.DDFS_VALUE_MSG,
+    messaging.DDFS_POSITION_MSG,
+    messaging.DDFS_CHILD_MSG,
+    messaging.DDFS_PSEUDO_CHILD_MSG,
 ]
 
 
@@ -173,6 +177,8 @@ class GridWorld(SimulationEnvironment):
         self.scores = defaultdict(float)
 
         self._registered_agents = []
+        self._ack_agents = []
+        self._paused_msgs = defaultdict(list)
 
         # metrics-related
         self._metrics = {}
@@ -180,11 +186,12 @@ class GridWorld(SimulationEnvironment):
         self._metrics_file_name = 'metrics.csv'
 
         self._handlers = {
-            AGENT_REGISTRATION: self._receive_agent_registration,
-            ANNOUNCE: self._receive_announce_msg,
-            VALUE_SELECTED_MSG: self._receive_value_selection,
-            ADD_GRAPH_EDGE: self._receive_add_graph_edge,
-            REMOVE_GRAPH_EDGE: self._receive_remove_graph_edge,
+            messaging.AGENT_REGISTRATION: self._receive_agent_registration,
+            messaging.ANNOUNCE: self._receive_announce_msg,
+            messaging.VALUE_SELECTED_MSG: self._receive_value_selection,
+            messaging.ADD_GRAPH_EDGE: self._receive_add_graph_edge,
+            messaging.REMOVE_GRAPH_EDGE: self._receive_remove_graph_edge,
+            messaging.DDFS_NEIGHBOR_DATA: self._receive_neighbor_data,
         }
 
     def __call__(self, *args, **kwargs):
@@ -250,7 +257,7 @@ class GridWorld(SimulationEnvironment):
     def _receive_announce_msg(self, msg):
         self.log.info(f'Received announce message: {msg}')
         self._broadcast_announce(msg)
-        self.client.call_later(0, functools.partial(self._broadcast_announce, msg))
+        # self.client.call_later(0, functools.partial(self._broadcast_announce, msg))
 
     def _broadcast_announce(self, msg):
         for agent in self.get_agents_in_communication_range(msg['agent_id']):
@@ -341,6 +348,9 @@ class GridWorld(SimulationEnvironment):
         grid = [str(v) for v in self.grid.values()]
         self._state_history.append((f't={str(self._current_time_step)}', grid))
         self.log.info(f'Current time step: {self._current_time_step}')
+
+        self._ack_agents.clear()
+        self._paused_msgs.clear()
 
         # send time step information to already registered agents
         for agent in self._registered_agents:
@@ -604,3 +614,39 @@ class GridWorld(SimulationEnvironment):
             self._current_graph,
             os.path.join(ROOT_DIR, f'simulation_metrics/graphs/{self._current_time_step}.adjlist')
         )
+
+    def _receive_neighbor_data(self, msg):
+        self.log.debug(f'Received neighbor data: {msg}')
+
+        # record this agent as acknowledging time step msg (neighbor data is sent only after time step data is received)
+        self._ack_agents.append(msg['agent_id'])
+
+        # broadcast this neighbor data to all neighbors that are ready to receive it or pause it for those not ready yet
+        for agent in self.get_agents_in_communication_range(msg['agent_id']):
+            body = messaging.create_neighbor_data_message(msg)
+            key = f'{messaging.AGENTS_CHANNEL}.{agent}'
+            if agent in self._ack_agents:
+                self.channel.basic_publish(
+                    exchange=messaging.COMM_EXCHANGE,
+                    routing_key=key,
+                    body=body
+                )
+            else:
+                self.log.debug(f'Place {msg} on hold for {agent}')
+                self._paused_msgs[agent].append((key, body))
+
+        # if the agent sending this neighbor data has any paused msgs, send them now since it is ready
+        paused_msgs = self._paused_msgs[msg['agent_id']]
+        if paused_msgs:
+            self.log.debug(f'Sending {len(paused_msgs)} paused messages to {msg["agent_id"]}')
+        for _ in range(len(paused_msgs)):
+            key, body = paused_msgs.pop()
+            self.channel.basic_publish(
+                exchange=messaging.COMM_EXCHANGE,
+                routing_key=key,
+                body=body
+            )
+
+
+
+

@@ -32,23 +32,29 @@ class CoCoA(DCOP):
     def execute_dcop(self):
         self.log.info('Initiating CoCoA')
 
-        self.value = None
+        if not self.value:
+            self.state = self.ACTIVE
+            self.report_state_change_to_dashboard()
 
-        self.state = self.ACTIVE
-        self.report_state_change_to_dashboard()
-
-        if len(self.graph.neighbors) == 0:
-            self.select_random_value()
+            if len(self.graph.neighbors) == 0:
+                self.select_random_value()
+            else:
+                for agent in self.graph.neighbors:
+                    # if agent in self.graph.children:
+                    #     self.send_update_state_message(agent, {
+                    #         'agent_id': self.agent.agent_id,
+                    #         'state': self.state,
+                    #     })
+                    self.send_inquiry_message(agent, {
+                        'agent_id': self.agent.agent_id,
+                        'domain': self.domain,
+                    })
         else:
-            for agent in self.graph.neighbors:
-                # if agent in self.graph.children:
-                #     self.send_update_state_message(agent, {
-                #         'agent_id': self.agent.agent_id,
-                #         'state': self.state,
-                #     })
-                self.send_inquiry_message(agent, {
+            for child in self.graph.neighbors:
+                self.send_update_state_message(child, {
                     'agent_id': self.agent.agent_id,
-                    'domain': self.domain,
+                    'state': self.state,
+                    'cpa': self.cpa,
                 })
 
     def select_value(self):
