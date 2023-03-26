@@ -1,17 +1,17 @@
 import numpy as np
 
 from mascoord.src import config
-from mascoord.src.algorithms.dcop.sdpop import SDPOP
+from mascoord.src.algorithms.dcop.dpop import DPOP
 
 
-class CSDPOP(SDPOP):
+class CDPOP(DPOP):
     """
     A continuous domain analogue of the SDPOP algorithm
     """
     name = 'c-sdpop'
 
     def __init__(self, *args, **kwargs):
-        super(CSDPOP, self).__init__(*args, **kwargs)
+        super(CDPOP, self).__init__(*args, **kwargs)
         self.max_iter = 100
         self.alpha = config.LEARNING_RATE
         self.X_ij_prev_norm = None

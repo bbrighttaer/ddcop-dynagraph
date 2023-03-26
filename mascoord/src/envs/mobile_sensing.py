@@ -40,6 +40,8 @@ METRICS_HEADERS = [
     messaging.DDFS_POSITION_MSG,
     messaging.DDFS_CHILD_MSG,
     messaging.DDFS_PSEUDO_CHILD_MSG,
+    messaging.UTIL_MESSAGE,
+    messaging.VALUE_MESSAGE,
 ]
 
 

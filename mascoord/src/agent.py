@@ -370,6 +370,7 @@ class Agent:
     def _receive_time_step_message(self, message):
         self.log.info(f'Received time step message: {message}')
         self.dcop.domain = message['payload']['agent_domain']
+        self.dcop.neighbor_domains = message['payload']['neighbor_domains']
         self.agents_in_comm_range = message['payload']['agents_in_comm_range']
         self.new_agents = set(self.agents_in_comm_range) - set(self.graph.neighbors)
         self._num_connect_calls = 0
@@ -508,6 +509,7 @@ class AgentMetrics:
             messaging.ADD_GRAPH_EDGE,
             messaging.REMOVE_GRAPH_EDGE,
             messaging.AGENT_STATE_CHANGED,
+            messaging.VALUE_SELECTED_MSG,
         ]
 
         if message['type'] in ignored_messages:

@@ -14,8 +14,8 @@ import utils
 from mascoord.src.algorithms.dcop import DCOP
 from mascoord.src.algorithms.dcop.ccocoa import CCoCoA
 from mascoord.src.algorithms.dcop.cocoa import CoCoA
-from mascoord.src.algorithms.dcop.csdpop import CSDPOP
-from mascoord.src.algorithms.dcop.sdpop import SDPOP
+from mascoord.src.algorithms.dcop.cdpop import CDPOP
+from mascoord.src.algorithms.dcop.dpop import DPOP
 
 agents = {}
 terminated_agents = []
@@ -93,8 +93,8 @@ def set_dcop_algorithm(alg):
     dcop_algorithm = {
         'cocoa': CoCoA,
         'c-cocoa': CCoCoA,
-        'sdpop': SDPOP,
-        'c-sdpop': CSDPOP,
+        'dpop': DPOP,
+        'c-dpop': CDPOP,
     }.get(alg, DCOP)
 
 
