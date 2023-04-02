@@ -5,9 +5,10 @@ import random
 import signal
 import time
 
-import logger
+import numpy as np
 
 import config
+import logger
 from mascoord.src.config import DYNAMIC_SIM_ENV
 from mascoord.src.runner import Runner
 from mascoord.src.utils import time_since
@@ -38,6 +39,14 @@ if __name__ == '__main__':
         help='The DCOP algorithm to be used with the Dynamic Graph algorithm',
     )
     parser.add_argument(
+        '-g',
+        '--graph_alg',
+        type=str,
+        choices=['ddfs', 'digca'],
+        default='digca',
+        help='The DCOP algorithm to be used with the Dynamic Graph algorithm',
+    )
+    parser.add_argument(
         '-d',
         '--domain_size',
         type=int,
@@ -57,6 +66,12 @@ if __name__ == '__main__':
         choices=['min', 'max'],
         default='min',
         dest='opt_op',
+    )
+    parser.add_argument(
+        '-s',
+        '--seed',
+        default=0,
+        type=int,
     )
 
     subparsers = parser.add_subparsers(
@@ -143,6 +158,10 @@ if __name__ == '__main__':
 
     from mascoord.src import logger, handlers
 
+    seed = args.seed
+    np.random.seed(seed)
+    random.seed(seed)
+
     handlers.set_domain_size(args.domain_size)
 
     command = args.command
@@ -188,6 +207,7 @@ if __name__ == '__main__':
     elif command == 'mst-simulation':
         config.shared_config.execution_mode = DYNAMIC_SIM_ENV
         handlers.set_dcop_algorithm(args.algs[0])
+        handlers.set_graph_algorithm(args.graph_alg)
         runner = Runner(args)
         signal.signal(signal.SIGINT, functools.partial(_on_force_exit, runner.on_force_exit))
         runner.start_simulation_environment(args)

@@ -96,7 +96,6 @@ class Runner:
 
     def execute_sim_with_dashboard(self):
         log.info('Executing sim with dashboard (start dashboard to execute commands)')
-        random.seed(0)
         self._listen_for_messages()
         self.release_resources()
 
@@ -136,14 +135,17 @@ class Runner:
 
         log.info('Runner was closed successfully')
 
-    def start_simulation_environment(self, _args):
+    def start_simulation_environment(self, args):
         self.sim_env = GridWorld(
-            size=_args.grid_size,
-            num_targets=_args.num_targets,
+            size=args.grid_size,
+            num_targets=args.num_targets,
             scenario=MSTScenario(
-                num_add_agents=_args.num_agents,
-                num_remove_agents=_args.num_remove
+                num_add_agents=args.num_agents,
+                num_remove_agents=args.num_remove
             ).scenario(),
+            dcop_alg=args.algs[0],
+            graph_alg=args.graph_alg,
+            seed=args.seed,
         )
 
         # override sim-ended func to call stop signal

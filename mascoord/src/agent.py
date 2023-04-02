@@ -15,6 +15,7 @@ import logger
 import mascoord.src.algorithms.graphs
 import mascoord.src.algorithms.graphs.digca
 import messaging
+from mascoord.src.algorithms.graphs import DDFS, DIGCA
 from mascoord.src.equations import Quadratic
 from mascoord.src.utils import time_diff, notify_wrap
 
@@ -118,7 +119,10 @@ class Agent:
         )
 
         # algorithms
-        self.graph = mascoord.src.algorithms.graphs.DDFS(self)
+        if 'graph_algorithm' in kwargs and kwargs['graph_algorithm'] == 'ddfs':
+            self.graph = DDFS(self)
+        else:
+            self.graph = DIGCA(self)
         self.dcop = dcop_algorithm(self, num_discrete_points=kwargs['domain_size'])
 
         self.report_shutdown = False

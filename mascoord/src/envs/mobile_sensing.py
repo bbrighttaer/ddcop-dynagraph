@@ -1,12 +1,11 @@
 import copy
-import functools
+import csv
 import os.path
 import random
 from collections import defaultdict
 
-import numpy as np
 import networkx as nx
-import csv
+import numpy as np
 
 from mascoord.definitions import ROOT_DIR
 from mascoord.src import messaging
@@ -160,7 +159,7 @@ class GridWorld(SimulationEnvironment):
     name = 'GridWorld'
     grid = {}
 
-    def __init__(self, size, num_targets, scenario=None):
+    def __init__(self, size, num_targets, dcop_alg, graph_alg, seed,  scenario=None):
         super(GridWorld, self).__init__(self.name, time_step_delay=10, scenario=scenario)
         self.log.info(f'Number of scenarios: {len(scenario)}')
         self._delayed_actions = {}
@@ -185,7 +184,8 @@ class GridWorld(SimulationEnvironment):
         # metrics-related
         self._metrics = {}
         self._metrics_file_headers = []
-        self._metrics_file_name = 'metrics.csv'
+        self._sim_file_suffix = f'{seed}_{dcop_alg}_{graph_alg}'
+        self._metrics_file_name = f'metrics_{self._sim_file_suffix}.csv'
 
         self._handlers = {
             messaging.AGENT_REGISTRATION: self._receive_agent_registration,
@@ -601,20 +601,23 @@ class GridWorld(SimulationEnvironment):
         self._add_metrics_csv_line(ts_metrics)
 
         # save grid info to file
-        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', 'grids'), exist_ok=True)
+        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', f'grids-{self._sim_file_suffix}'), exist_ok=True)
         grid_info = self._state_history[-1]
         with open(os.path.join(
                 ROOT_DIR,
-                'simulation_metrics/grids',
+                f'simulation_metrics/grids-{self._sim_file_suffix}',
                 f'grid-{self._current_time_step}.txt'
         ), 'w') as f:
             f.write(str(grid_info))
 
         # save graph info to file
-        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', 'graphs'), exist_ok=True)
+        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', f'graphs-{self._sim_file_suffix}'), exist_ok=True)
         nx.write_adjlist(
             self._current_graph,
-            os.path.join(ROOT_DIR, f'simulation_metrics/graphs/{self._current_time_step}.adjlist')
+            os.path.join(
+                ROOT_DIR,
+                f'simulation_metrics/graphs-{self._sim_file_suffix}/{self._current_time_step}.adjlist'
+            )
         )
 
     def _receive_neighbor_data(self, msg):

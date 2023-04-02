@@ -31,6 +31,7 @@ CHANGE_CONSTRAINT = 'change_constraint'
 last_event = None
 last_event_date_time = None
 dcop_algorithm = None
+graph_algorithm = None
 
 costs_per_event = {}
 num_mgs_per_event = {}
@@ -76,11 +77,14 @@ def reset_buffers():
 
 def create_and_start_agent(agent_id):
     if dcop_algorithm:
-        dcop_agent = agent.Agent(agent_id, dcop_algorithm,
-                                 coefficients_dict=utils.coefficients_dict,
-                                 domain_size=domain_size,
-                                 metrics=metrics,
-                                 shared_config=config.shared_config)
+        dcop_agent = agent.Agent(
+            agent_id, dcop_algorithm,
+            coefficients_dict=utils.coefficients_dict,
+            domain_size=domain_size,
+            metrics=metrics,
+            shared_config=config.shared_config,
+            graph_algorithm=graph_algorithm
+        )
         agents[agent_id] = dcop_agent
         dcop_agent()
     else:
@@ -96,6 +100,11 @@ def set_dcop_algorithm(alg):
         'dpop': DPOP,
         'c-dpop': CDPOP,
     }.get(alg, DCOP)
+
+
+def set_graph_algorithm(graph_alg):
+    global graph_algorithm
+    graph_algorithm = graph_alg
 
 
 def set_domain_size(size):
@@ -210,7 +219,8 @@ def change_constraint_handler(msg):
                 selected_id = random.choice(list(agents.keys()))
                 selected_agent = agents[selected_id]
                 selected_neighbor = selected_agent.select_random_neighbor()
-                evt = f'{CHANGE_CONSTRAINT}:{selected_id}-{selected_neighbor}:' + ';'.join([str(v) for v in coefficients])
+                evt = f'{CHANGE_CONSTRAINT}:{selected_id}-{selected_neighbor}:' + ';'.join(
+                    [str(v) for v in coefficients])
 
             commands.append(evt)
 
