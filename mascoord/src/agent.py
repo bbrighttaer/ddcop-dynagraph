@@ -331,6 +331,9 @@ class Agent:
             case messaging.COST_MESSAGE:
                 self.dcop.receive_cost_message(message)
 
+            case messaging.EXECUTION_REQUEST:
+                self.dcop.receive_execution_request_message(message)
+
             # SDPOP/C-SDPOP message handling
             case messaging.VALUE_MESSAGE:
                 self.dcop.receive_value_message(message)
@@ -394,8 +397,8 @@ class Agent:
         if len(self.agents_in_comm_range) == 0:
             self.dcop.select_random_value()
 
-        # if all agents in range are already children then start DCOP
-        if self.has_neighbor and set(self.agents_in_comm_range) == set(self.graph.children):
+        # if no neighborhood change
+        if self.has_neighbor and set(self.agents_in_comm_range) == set(self.graph.neighbors):
             self.execute_dcop()
 
     def __call__(self, *args, **kwargs):

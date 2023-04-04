@@ -19,6 +19,7 @@ class DIGCA(DynaGraph):
 
     def __init__(self, agent):
         super(DIGCA, self).__init__(agent)
+        self._has_sent_parent_available = False
         self.pinged_list_dict = {}
         self.state = State.INACTIVE
         self.announceResponseList = []
@@ -28,6 +29,7 @@ class DIGCA(DynaGraph):
     def on_time_step_changed(self):
         self._ignored_ann_msgs.clear()
         self._parent_already_assigned_msgs.clear()
+        self._has_sent_parent_available = False
 
     def connect(self):
         if not self.parent and self.has_potential_parent() and self.state == State.INACTIVE:
@@ -85,7 +87,7 @@ class DIGCA(DynaGraph):
 
             self.announceResponseList.clear()
 
-        elif self.has_potential_child():
+        elif self.has_potential_child() and not self._has_sent_parent_available:
             for a in self._get_potential_children():
                 self.channel.basic_publish(
                     exchange=messaging.COMM_EXCHANGE,
@@ -352,7 +354,9 @@ class DIGCA(DynaGraph):
         self._parent_already_assigned_msgs[sender] = message
         self.log.info(f'Received parent already assigned message from {sender}')
 
-        if len(set(self._parent_already_assigned_msgs)) == len(self._get_potential_children()) and not self.agent.value:
+        if len(self._parent_already_assigned_msgs.keys()) == len(self._get_potential_children()) \
+                and not self.agent.value:
+            self._has_sent_parent_available = True
             self.agent.execute_dcop()
 
     def _get_potential_children(self):

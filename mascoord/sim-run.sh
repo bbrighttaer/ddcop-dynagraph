@@ -1,5 +1,5 @@
-dcop_alg="cocoa"
-graph_alg="ddfs"
+dcop_alg="dpop"
+graph_alg="digca"
 num_agents=30
 num_remove=5
 num_targets=15

@@ -60,6 +60,7 @@ METRICS_REPORT = 'METRICS_REPORT'
 UPDATE_STATE_MESSAGE = 'UpdateStateMsg'
 INQUIRY_MESSAGE = 'InquiryMessage'
 COST_MESSAGE = 'CostMessage'
+EXECUTION_REQUEST = 'ExecutionRequest'
 
 # SDPOP message types
 VALUE_MESSAGE = 'ValueMessage'
@@ -269,5 +270,5 @@ def create_ddfs_pseudo_child_message(data):
     return _create_msg(DDFS_PSEUDO_CHILD_MSG, data)
 
 
-def create_ddfs_pseudo_parent_message(data):
-    return _create_msg(DDFS_PSEUDO_PARENT_MSG, data)
+def create_execution_request_message(data):
+    return _create_msg(EXECUTION_REQUEST, data)

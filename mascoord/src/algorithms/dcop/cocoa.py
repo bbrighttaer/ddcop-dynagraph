@@ -19,11 +19,13 @@ class CoCoA(DCOP):
 
     def __init__(self, *args, **kwargs):
         super(CoCoA, self).__init__(*args, **kwargs)
+        self._can_start = False
         self.state = self.IDLE
         self.neighbor_states = {}
         self.cost_map = {}
 
     def on_time_step_changed(self):
+        self._can_start = False
         self.state = self.IDLE
         self.cost_map.clear()
         self.value = None
@@ -37,20 +39,28 @@ class CoCoA(DCOP):
             self.state = self.ACTIVE
             self.report_state_change_to_dashboard()
 
+            # when agent is isolated
             if len(neighbors) == 0:
                 self.select_random_value()
-            else:
-                self.log.info(f'Sending Inquiry messages to: {neighbors}')
-                for agent in neighbors:
-                    # if agent in self.graph.children:
-                    #     self.send_update_state_message(agent, {
-                    #         'agent_id': self.agent.agent_id,
-                    #         'state': self.state,
-                    #     })
-                    self.send_inquiry_message(agent, {
+
+            # subsequent execution in the resolution process
+            elif self._can_start:
+                self._can_start = False
+                self._send_inquiry_messages()
+
+            # when agent is root
+            elif not self.graph.parent and self.graph.neighbors:
+                self._send_inquiry_messages()
+
+            # when agent has a parent:
+            elif self.graph.parent:
+                self.send_execution_request_message(
+                    recipient=self.graph.parent,
+                    data={
                         'agent_id': self.agent.agent_id,
-                        'domain': self.domain,
-                    })
+                    }
+                )
+
         else:
             for child in neighbors:
                 self.send_update_state_message(child, {
@@ -58,6 +68,15 @@ class CoCoA(DCOP):
                     'state': self.state,
                     'cpa': self.cpa,
                 })
+
+    def _send_inquiry_messages(self):
+        neighbors = self.graph.neighbors
+        self.log.info(f'Sending Inquiry messages to: {neighbors}')
+        for agent in neighbors:
+            self._send_inquiry_message(agent, {
+                'agent_id': self.agent.agent_id,
+                'domain': self.domain,
+            })
 
     def select_value(self):
         """
@@ -117,7 +136,12 @@ class CoCoA(DCOP):
                                          routing_key=f'{messaging.AGENTS_CHANNEL}.{recipient}',
                                          body=messaging.create_update_state_message(data))
 
-    def send_inquiry_message(self, recipient, data):
+    def send_execution_request_message(self, recipient, data):
+        self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
+                                         routing_key=f'{messaging.AGENTS_CHANNEL}.{recipient}',
+                                         body=messaging.create_execution_request_message(data))
+
+    def _send_inquiry_message(self, recipient, data):
         self.graph.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,
                                          routing_key=f'{messaging.AGENTS_CHANNEL}.{recipient}',
                                          body=messaging.create_inquiry_message(data))
@@ -182,7 +206,12 @@ class CoCoA(DCOP):
 
         if data['state'] == self.DONE and self.value is None:
             self.cpa = data['cpa']
+            self._can_start = True
             self.execute_dcop()
 
+    def receive_execution_request_message(self, payload):
+        self.log.info(f'Received execution request: {payload}')
+        self.execute_dcop()
+
     def __str__(self):
-        return 'c-cocoa'
+        return 'cocoa'

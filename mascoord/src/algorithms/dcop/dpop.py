@@ -10,7 +10,7 @@ class DPOP(DCOP):
     Implements the SDPOP algorithm
     """
     traversing_order = 'bottom-up'
-    name = 'sdpop'
+    name = 'dpop'
 
     def __init__(self, *args, **kwargs):
         super(DPOP, self).__init__(*args, **kwargs)
@@ -61,7 +61,10 @@ class DPOP(DCOP):
         c_util_sum = np.array([0.] * len(self.domain))
         for child in self.graph.children:
             c_util = self.util_messages[child]
-            c_util_sum += np.array(c_util)
+            try:
+                c_util_sum += np.array(c_util)
+            except Exception as e:
+                self.log.error(str(e))
 
         # parent
         if self.graph.parent:
@@ -100,14 +103,19 @@ class DPOP(DCOP):
         self.util_received = False
 
     def execute_dcop(self):
+        if len(self.graph.neighbors) == 0:
+            self.select_random_value()
+
         # start sending UTIL when this node is a leaf
-        if self.graph.parent and not self.graph.children:
+        elif self.graph.parent and not self.graph.children:
             self.log.info('Initiating DPOP...')
             self.X_ij = None
 
             # calculate UTIL messages and send to parent
             self._compute_util_and_value()
+
         elif not self._util_msg_requested:
+            self.log.info('Requesting UTIL msgs from children')
             self._send_util_requests_to_children()
             self._util_msg_requested = True
 
@@ -168,7 +176,7 @@ class DPOP(DCOP):
             self.value = self.domain[int(self.arg_optimization_op(x_i))]
             self.cpa[f'agent-{self.agent.agent_id}'] = self.value
 
-            self.log.info(f'Cost is {self.cost}')
+            self.log.info(f'Cost is {self.cost}, value = {self.value}')
 
             self.value_selection(self.value)
 

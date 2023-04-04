@@ -33,6 +33,7 @@ METRICS_HEADERS = [
     messaging.CONSTRAINT_CHANGED,
     messaging.UPDATE_STATE_MESSAGE,
     messaging.INQUIRY_MESSAGE,
+    messaging.EXECUTION_REQUEST,
     messaging.COST_MESSAGE,
     messaging.DDFS_NEIGHBOR_DATA,
     messaging.DDFS_VALUE_MSG,
