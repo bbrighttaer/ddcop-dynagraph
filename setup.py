@@ -1,9 +1,9 @@
 from setuptools import setup
 
 setup(
-    name='ddcop-dynagraph',
+    name='mascoord',
     version='0.0.1',
-    packages=['mascoord', 'mascoord.algorithms'],
+    packages=['mascoord', 'mascoord.src'],
     url='https://github.com/bbrighttaer/ddcop-dynagraph',
     license='MIT',
     author='Brighter Agyemang',

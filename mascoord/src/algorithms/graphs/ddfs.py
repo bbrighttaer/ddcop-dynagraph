@@ -95,9 +95,8 @@ class DDFS(DynaGraph):
 
         # process any delayed value message
         if self._paused_value_msgs:
-            self.log.debug(f'Sending {len(self._paused_value_msgs)} paused value messages')
-            for _ in range(len(self._paused_value_msgs)):
-                self.receive_value_message(self._paused_value_msgs.pop())
+            self.log.debug(f'Found {len(self._paused_value_msgs)} paused value messages')
+            self.receive_value_message()
 
     def remove_agent(self, agent):
         if self.parent == agent:
@@ -110,13 +109,16 @@ class DDFS(DynaGraph):
         self.agent.agent_disconnection_callback(agent)
         self.report_agent_disconnection(agent)
 
-    def receive_value_message(self, message):
-        self.log.debug(f'Received DDFS value message: {message}')
-        msg = message['payload']
-        self._value_msgs[msg['agent_id']] = msg['value']
+    def receive_value_message(self, message=None):
+        if message:
+            self.log.debug(f'Received DDFS value message: {message}')
+            msg = message['payload']
+            self._value_msgs[msg['agent_id']] = msg['value']
 
-        if self._max < msg['value']:
-            self._max = msg['value']
+            if self._max < msg['value']:
+                self._max = msg['value']
+        else:
+            self.log.debug('Value message call triggered with an empty message')
 
         split_executed = bool(self._children_temp or self._parents)
         has_received_all_value_msgs = len(set(self._children_temp) - set(self._value_msgs.keys())) == 0
