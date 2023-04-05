@@ -19,6 +19,7 @@ class CoCoA(DCOP):
 
     def __init__(self, *args, **kwargs):
         super(CoCoA, self).__init__(*args, **kwargs)
+        self._started = False
         self._can_start = False
         self.state = self.IDLE
         self.neighbor_states = {}
@@ -26,6 +27,7 @@ class CoCoA(DCOP):
 
     def on_time_step_changed(self):
         self._can_start = False
+        self._started = False
         self.state = self.IDLE
         self.cost_map.clear()
         self.value = None
@@ -60,7 +62,6 @@ class CoCoA(DCOP):
                         'agent_id': self.agent.agent_id,
                     }
                 )
-
         else:
             for child in neighbors:
                 self.send_update_state_message(child, {

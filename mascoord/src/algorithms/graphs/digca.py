@@ -358,6 +358,11 @@ class DIGCA(DynaGraph):
                 and not self.agent.value:
             self._has_sent_parent_available = True
             self.agent.execute_dcop()
+        # else:
+        #     self.log.debug(
+        #         f'Waiting for other agents: {list(self._parent_already_assigned_msgs.keys())}, '
+        #         f'{self._get_potential_children()},{self.agent.value}'
+        #     )
 
     def _get_potential_children(self):
         agents = []
