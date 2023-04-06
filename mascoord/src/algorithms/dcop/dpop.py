@@ -120,8 +120,14 @@ class DPOP(DCOP):
             self._util_msg_requested = True
 
     def _send_util_requests_to_children(self):
-        for child in self.graph.children:
-            if child not in self.util_messages:
+        # get agents that are yet to send UTIL msgs
+        new_agents = set(self.graph.children) - set(self.util_messages.keys())
+
+        # if all UTIL msgs have been received then compute UTIL and send to parent
+        if self.util_messages and len(new_agents) == 0:
+            self._compute_util_and_value()
+        else:
+            for child in new_agents:
                 self.request_util_message(child)
 
     def can_resolve_agent_value(self) -> bool:

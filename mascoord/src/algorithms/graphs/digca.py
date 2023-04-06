@@ -88,7 +88,7 @@ class DIGCA(DynaGraph):
             self.announceResponseList.clear()
 
         elif self.has_potential_child() and not self._has_sent_parent_available:
-            for a in self._get_potential_children():
+            for a in set(self._get_potential_children()) - set(self._parent_already_assigned_msgs.keys()):
                 self.channel.basic_publish(
                     exchange=messaging.COMM_EXCHANGE,
                     routing_key=f'{messaging.AGENTS_CHANNEL}.{a}',
