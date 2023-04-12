@@ -37,11 +37,11 @@ def create_on_message(log, agent_id, message_queue, handle_message, agent_snapsh
         # log.debug(f'from agent.on_message: received {message}')
 
         # run agent ops on payload
-        try:
-            handle_message(message)
-        except Exception as e:
-            log.info(f'Agent snapshot: {agent_snapshot()}\nPayload: {message}')
-            print_exception(e)
+        # try:
+        handle_message(message)
+        # except Exception as e:
+        #     log.info(f'Agent snapshot: {agent_snapshot()}\nPayload: {message}')
+        #     log.exception(e)
 
     return on_message
 
@@ -80,7 +80,6 @@ class Agent:
 
         self.agents_in_comm_range = None
         self.new_agents = set()
-        self._num_connect_calls = 0
 
         self.client = pika.BlockingConnection(
             pika.ConnectionParameters(
@@ -238,7 +237,7 @@ class Agent:
             'state': self.state,
             'cost': self.cost,
             'parent': self.parent,
-            'pinged_list': self.graph.pinged_list_dict,
+            # 'pinged_list': self.graph.pinged_list_dict,
             'value': self.dcop.value,
         }
         if self.dcop.name == 'c-cocoa':
@@ -380,10 +379,6 @@ class Agent:
         self.dcop.neighbor_domains = message['payload']['neighbor_domains']
         self.agents_in_comm_range = message['payload']['agents_in_comm_range']
         self.new_agents = set(self.agents_in_comm_range) - set(self.graph.neighbors)
-        self._num_connect_calls = 0
-
-        self.dcop.on_time_step_changed()
-        self.graph.on_time_step_changed()
 
         # remove agents that are out-of-range
         agents_to_remove = set(self.graph.neighbors) - set(self.agents_in_comm_range)
@@ -393,13 +388,15 @@ class Agent:
 
         self.log.info(f'parent={self.parent}, children={self.children}, agents-in-range={self.agents_in_comm_range}')
 
-        # if no connection exists or could happen (agent is alone)
-        if len(self.agents_in_comm_range) == 0:
-            self.dcop.select_random_value()
+        self.dcop.on_time_step_changed()
+        self.graph.on_time_step_changed()
 
         # if no neighborhood change
-        if self.has_neighbor and set(self.agents_in_comm_range) == set(self.graph.neighbors):
-            self.execute_dcop()
+        if not self.graph.has_potential_neighbor():
+            self.graph.start_dcop()
+
+    def select_random_value(self):
+        self.dcop.select_random_value()
 
     def __call__(self, *args, **kwargs):
         self.log.info('Initializing...')
@@ -431,7 +428,7 @@ class Agent:
 
     def listen_to_network(self):
         self._time_lapse()
-        self.log.info('listening...')
+        # self.log.info('listening...')
         self.client.sleep(config.AGENT_COMM_TIMEOUT_IN_SECONDS)
         self._start_time()
 

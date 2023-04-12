@@ -97,8 +97,8 @@ class DIGCA(DynaGraph):
                     })
                 )
 
-        else:
-            self.log.debug(f'Not announcing, state={self.state}')
+        # else:
+        #     self.log.debug(f'Not announcing, state={self.state}')
 
     def receive_announce(self, message):
         self.log.debug(f'Received announce: {message}')
@@ -338,7 +338,7 @@ class DIGCA(DynaGraph):
             self.agent.execute_dcop()
 
     def receive_parent_available_message(self, message):
-        self.log.info(f'Received parent available message: {message}')
+        # self.log.info(f'Received parent available message: {message}')
         if self.parent:
             sender = message['payload']['agent_id']
             self.channel.basic_publish(
@@ -352,7 +352,7 @@ class DIGCA(DynaGraph):
     def receive_parent_already_assigned(self, message):
         sender = message['payload']['agent_id']
         self._parent_already_assigned_msgs[sender] = message
-        self.log.info(f'Received parent already assigned message from {sender}')
+        # self.log.debug(f'Received parent already assigned message from {sender}')
 
         if len(self._parent_already_assigned_msgs.keys()) == len(self._get_potential_children()) \
                 and not self.agent.value:
@@ -371,3 +371,16 @@ class DIGCA(DynaGraph):
                 agents.append(_agt)
 
         return agents
+
+    def has_potential_parent(self):
+        for _agt in set(self.agent.new_agents) - set(self.neighbors):
+            if int(_agt.replace('a', '')) < int(self.agent.agent_id.replace('a', '')):
+                return True
+
+        return False
+
+    def has_potential_child(self):
+        return bool(self._get_potential_children())
+
+    def has_potential_neighbor(self):
+        return self.has_potential_child() or (not self.parent and self.has_potential_parent())

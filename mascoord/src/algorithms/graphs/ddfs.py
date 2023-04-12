@@ -177,10 +177,10 @@ class DDFS(DynaGraph):
                     to=p,
                 )
 
-            is_leaf_node = len(self._children_temp) == 0
-            if is_leaf_node:
-                if self.agent.graph_traversing_order == 'bottom-up':
-                    self.start_dcop()
+            # is_leaf_node = len(self._children_temp) == 0
+            # if is_leaf_node:
+            if self.agent.graph_traversing_order == 'bottom-up':
+                self.start_dcop()
 
     def receive_pseudo_child_msg(self, msg):
         self.log.debug(f'Received pseudo-child msg: {msg}')
@@ -214,5 +214,8 @@ class DDFS(DynaGraph):
                 and len(self.children + self.pseudo_children) == len(self.agent.agents_in_comm_range):
             self.log.debug('Starting DCOP - child')
             self.start_dcop()
+
+    def has_potential_neighbor(self):
+        return bool(self.agent.agents_in_comm_range)
 
 

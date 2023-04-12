@@ -475,6 +475,7 @@ class GridWorld(SimulationEnvironment):
 
             # gather simulation metrics
             self._record_simulation_metrics()
+            self.log.info('All metrics collected.')
 
             # clear time step registers
             self._delayed_actions.clear()
@@ -590,18 +591,27 @@ class GridWorld(SimulationEnvironment):
                 ts_metrics[metric] += val
 
         # graph metrics
+        self.log.debug('Updating sim time step metrics...')
         if self._previous_graph is None:
             ts_metrics['edit distance'] = 0
         else:
-            ts_metrics['edit distance'] = nx.graph_edit_distance(self._previous_graph, self._current_graph)
+            self.log.debug('calculating edit distance')
+            # self.log.debug(f'({nx.to_numpy_array(self._previous_graph).tolist()}), '
+            #                f'({nx.to_numpy_array(self._current_graph).tolist()})')
+            ts_metrics['edit distance'] = 0.  # nx.graph_edit_distance(self._previous_graph, self._current_graph)
+        self.log.debug('copying graph...')
         self._copy_current_graph()
+        self.log.debug('setting num components')
         ts_metrics['num components'] = nx.number_connected_components(self._current_graph)
+        self.log.debug('setting number of nodes')
         ts_metrics['num nodes'] = nx.number_of_nodes(self._current_graph)
 
         # save metrics to file
+        self.log.debug('Saving time step metrics to file...')
         self._add_metrics_csv_line(ts_metrics)
 
         # save grid info to file
+        self.log.debug('Writing sim grids...')
         os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', f'grids-{self._sim_file_suffix}'), exist_ok=True)
         grid_info = self._state_history[-1]
         with open(os.path.join(
@@ -612,6 +622,7 @@ class GridWorld(SimulationEnvironment):
             f.write(str(grid_info))
 
         # save graph info to file
+        self.log.debug('Writing sim graphs...')
         os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', f'graphs-{self._sim_file_suffix}'), exist_ok=True)
         nx.write_adjlist(
             self._current_graph,

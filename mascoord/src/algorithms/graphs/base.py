@@ -60,18 +60,13 @@ class DynaGraph:
                                    }))
 
     def has_potential_parent(self):
-        for _agt in set(self.agent.new_agents) - set(self.neighbors):
-            if int(_agt.replace('a', '')) < int(self.agent.agent_id.replace('a', '')):
-                return True
-
-        return False
+        ...
 
     def has_potential_child(self):
-        for _agt in set(self.agent.new_agents) - set(self.neighbors):
-            if int(_agt.replace('a', '')) > int(self.agent.agent_id.replace('a', '')):
-                return True
+        ...
 
-        return False
+    def has_potential_neighbor(self):
+        ...
 
     def report_agent_disconnection(self, agent):
         # inform dashboard about disconnection

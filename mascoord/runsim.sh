@@ -1,6 +1,6 @@
 dcop_alg="dpop"
-graph_alg="digca"
-rnd_seed=1
+graph_alg="ddfs"
+rnd_seed=0
 num_agents=30
 num_remove=5
 num_targets=15
