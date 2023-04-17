@@ -3,6 +3,7 @@ import functools
 import os
 import random
 import signal
+import sys
 import time
 
 import numpy as np
@@ -20,6 +21,8 @@ start_time = time.time()
 
 def _on_force_exit(sub_exit_func, sig, frame):
     sub_exit_func(sig, frame)
+    log.info('Press Ctrl-C to exit')
+    sys.exit(1)
 
 
 def _on_timeout(on_timeout_func):

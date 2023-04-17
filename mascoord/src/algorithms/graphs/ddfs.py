@@ -13,8 +13,6 @@ class DDFS(DynaGraph):
         self._paused_value_msgs = []
         self._children_temp = []
         self._parents = []
-        self.pseudo_children = []
-        self.pseudo_parents = []
         self._neighbor_data = {}
 
         self._value_msgs = {}
@@ -122,6 +120,7 @@ class DDFS(DynaGraph):
 
         split_executed = bool(self._children_temp or self._parents)
         has_received_all_value_msgs = len(set(self._children_temp) - set(self._value_msgs.keys())) == 0
+
         if split_executed and has_received_all_value_msgs:
             self._max += 1
 
@@ -153,7 +152,7 @@ class DDFS(DynaGraph):
 
         self._parents_levels[msg['agent_id']] = msg['position']
 
-        if len(self._parents_levels) == len(self._parents):
+        if set(self._parents_levels.keys()) == set(self._parents):
             parents = sorted(self._parents, key=lambda p: self._parents_levels[p])
             self.parent = parents.pop(0)
             self.pseudo_parents = parents
@@ -177,10 +176,10 @@ class DDFS(DynaGraph):
                     to=p,
                 )
 
-            # is_leaf_node = len(self._children_temp) == 0
-            # if is_leaf_node:
-            if self.agent.graph_traversing_order == 'bottom-up':
-                self.start_dcop()
+            self._check_and_start_dcop()
+
+        elif len(self._parents_levels) > len(self._parents):
+            self.log.warning(f'Size of parent levels is greater than parents: {self._parents_levels}, {self._parents}')
 
     def receive_pseudo_child_msg(self, msg):
         self.log.debug(f'Received pseudo-child msg: {msg}')
@@ -188,10 +187,7 @@ class DDFS(DynaGraph):
         self.pseudo_children.append(msg['agent_id'])
         self.log.debug(f'Added {msg["agent_id"]} as pseudo-child')
 
-        if self.agent.graph_traversing_order == 'top-down' \
-                and len(self.children + self.pseudo_children) == len(self.agent.agents_in_comm_range):
-            self.log.debug('Starting DCOP - pseudo-child')
-            self.start_dcop()
+        self._check_and_start_dcop()
 
     def receive_child_msg(self, msg):
         self.log.debug(f'Received child msg: {msg}')
@@ -210,9 +206,17 @@ class DDFS(DynaGraph):
             })
         )
 
-        if self.agent.graph_traversing_order == 'top-down' \
-                and len(self.children + self.pseudo_children) == len(self.agent.agents_in_comm_range):
-            self.log.debug('Starting DCOP - child')
+        self._check_and_start_dcop()
+
+    def _check_and_start_dcop(self):
+        order = self.agent.graph_traversing_order
+        if (
+                order == 'top-down'
+                and len(self.children + self.pseudo_children) == len(self.agent.agents_in_comm_range)
+        ) or (
+                order == 'bottom-up'
+                and set(self.get_connected_agents()) == set(self.agent.agents_in_comm_range)
+        ):
             self.start_dcop()
 
     def has_potential_neighbor(self):

@@ -1,5 +1,6 @@
 import os
 import random
+import sys
 import threading
 import time
 
@@ -155,7 +156,7 @@ class Runner:
         )
 
         # start sim environment
-        threading.Thread(target=self.sim_env).start()
+        threading.Thread(target=self.sim_env, daemon=True).start()
 
     def _on_dynamic_sim_env_ended(self):
         self._terminate = True
@@ -167,3 +168,4 @@ class Runner:
 
     def on_force_exit(self, sig, frame):
         log.info('Simulation terminated')
+        self.terminate = True

@@ -15,6 +15,8 @@ class DynaGraph:
         self.channel = self.agent.channel
         self.parent = None
         self.children = []
+        self.pseudo_children = []
+        self.pseudo_parents = []
         self.children_history = {}
         self.log = self.agent.log
         self.client = agent.client
@@ -90,3 +92,9 @@ class DynaGraph:
                 'to': self.agent.agent_id,
             })
         )
+
+    def get_connected_agents(self):
+        cons = self.children + self.pseudo_children + self.pseudo_parents
+        if self.parent:
+            cons += [self.parent]
+        return cons

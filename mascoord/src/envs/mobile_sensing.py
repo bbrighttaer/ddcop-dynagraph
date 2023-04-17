@@ -1,5 +1,6 @@
 import copy
 import csv
+import datetime
 import os.path
 import random
 from collections import defaultdict
@@ -162,11 +163,13 @@ class GridWorld(SimulationEnvironment):
 
     def __init__(self, size, num_targets, dcop_alg, graph_alg, seed,  scenario=None):
         super(GridWorld, self).__init__(self.name, time_step_delay=10, scenario=scenario)
+        self._copy_graph = graph_alg == 'digca'
         self.log.info(f'Number of scenarios: {len(scenario)}')
         self._delayed_actions = {}
         self.grid_size = size
         # self.grid = {}
         self._current_time_step = -1
+        self._event_timestamp = None
         self.num_targets = num_targets
         self._targets = {}
         self._events = ['add-agent', 'remove-agent', 'target_disabled', 'target_enabled', 'no-op']
@@ -280,6 +283,8 @@ class GridWorld(SimulationEnvironment):
                 self.log.info('Skipping delay event')
                 evt = next(self._events_iterator)
 
+            self._event_timestamp = datetime.datetime.now().timestamp()
+
             for a in evt.actions:
                 if a.type == 'add-agent':
                     self.log.info('Event action: Adding agent %s ', a)
@@ -340,7 +345,8 @@ class GridWorld(SimulationEnvironment):
         cell.contents.pop(cell.contents.index(msa))
 
         # remove node from current graph
-        self._current_graph.remove_node(agent)
+        if self._current_graph.has_node(agent):
+            self._current_graph.remove_node(agent)
 
         # remove from registered agents
         self._registered_agents.remove(agent)
@@ -361,6 +367,7 @@ class GridWorld(SimulationEnvironment):
 
         # when next-time-step is called but there are no agents
         if len(self.agents) == 0:
+            self.log.debug('No active agents, moving to next time step')
             self._receive_value_selection({}, is_forced=True)
 
     def _create_cells(self):
@@ -380,6 +387,7 @@ class GridWorld(SimulationEnvironment):
                 agt: self._get_legit_actions(self.agents[agt].current_cell)
                 for agt in self.get_agents_in_communication_range(agent_id)
             },
+            'event_timestamp': self._event_timestamp,
         }
 
     def get_agents_in_communication_range(self, agent_id) -> list:
@@ -562,7 +570,11 @@ class GridWorld(SimulationEnvironment):
             self._current_graph.remove_edge(msg['from'], msg['to'])
 
     def _copy_current_graph(self):
-        self._previous_graph = copy.deepcopy(self._current_graph)
+        if self._copy_graph:
+            self._previous_graph = copy.deepcopy(self._current_graph)
+        else:
+            self._previous_graph = self._current_graph
+            self._current_graph = nx.Graph()
 
     def _write_metrics_file_header(self, headers):
         os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics'), exist_ok=True)
@@ -596,9 +608,9 @@ class GridWorld(SimulationEnvironment):
             ts_metrics['edit distance'] = 0
         else:
             self.log.debug('calculating edit distance')
-            # self.log.debug(f'({nx.to_numpy_array(self._previous_graph).tolist()}), '
-            #                f'({nx.to_numpy_array(self._current_graph).tolist()})')
-            ts_metrics['edit distance'] = 0.  # nx.graph_edit_distance(self._previous_graph, self._current_graph)
+            self.log.debug(f'({nx.to_numpy_array(self._previous_graph).tolist()}), '
+                           f'({nx.to_numpy_array(self._current_graph).tolist()})')
+            ts_metrics['edit distance'] = nx.graph_edit_distance(self._previous_graph, self._current_graph)
         self.log.debug('copying graph...')
         self._copy_current_graph()
         self.log.debug('setting num components')

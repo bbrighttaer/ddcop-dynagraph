@@ -77,6 +77,7 @@ class Agent:
         self.start_time = time.time()
         self.accum_time = 0
         self.agent_metrics = AgentMetrics(self.agent_id, self.log)
+        self.latest_event_timestamp = None
 
         self.agents_in_comm_range = None
         self.new_agents = set()
@@ -288,6 +289,9 @@ class Agent:
         self.dcop.set_edge_costs()
 
     def handle_message(self, message):
+        # reject outdated messages (every message has a timestamp)
+        if self.latest_event_timestamp and message['timestamp'] < self.latest_event_timestamp:
+            return
 
         match message['type']:
             case messaging.ANNOUNCE:
@@ -374,6 +378,7 @@ class Agent:
                 self.log.info(f'Could not handle received payload: {message}')
 
     def _receive_time_step_message(self, message):
+        self.latest_event_timestamp = message['payload']['event_timestamp']
         self.log.info(f'Received time step message: {message}')
         self.dcop.domain = message['payload']['agent_domain']
         self.dcop.neighbor_domains = message['payload']['neighbor_domains']

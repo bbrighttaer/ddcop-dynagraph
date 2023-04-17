@@ -152,6 +152,9 @@ class DPOP(DCOP):
         if self.graph.is_child(sender):
             self.log.debug('Added UTIL message')
             self.util_messages[sender] = util
+
+        if set(self.graph.get_connected_agents()) == set(self.agent.agents_in_comm_range) and \
+                set(self.util_messages.keys()) == set(self.graph.children):
             self.util_received = True
 
         # reqeust util msgs from children yet to submit theirs
