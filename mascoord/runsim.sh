@@ -1,6 +1,6 @@
-dcop_alg="cocoa"
+dcop_alg="dpop"
 graph_alg="ddfs"
-rnd_seed=0
+rnd_seed=4
 num_agents=30
 num_remove=5
 num_targets=15
