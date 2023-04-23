@@ -156,6 +156,13 @@ if __name__ == '__main__':
         type=int,
         help="Number of targets in the GridWorld",
     )
+    sim_parser.add_argument(
+        "--scenarios_file",
+        "-f",
+        required=False,
+        type=str,
+        help="Path to pickled scenarios object",
+    )
 
     args = parser.parse_args()
 

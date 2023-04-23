@@ -27,6 +27,7 @@
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
+import pickle
 import random
 from typing import List
 
@@ -154,3 +155,12 @@ class MSTScenario:
                 i += 1
 
         return scenario
+
+    def load(self, file_path):
+        if file_path:
+            with open(file_path, 'rb') as f:
+                obj: Scenario = pickle.load(f)
+            assert len(obj.events) == self._num_add_agents + self._num_remove_agents
+            return obj
+        else:
+            return self.scenario()

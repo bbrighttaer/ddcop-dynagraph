@@ -608,8 +608,8 @@ class GridWorld(SimulationEnvironment):
             ts_metrics['edit distance'] = 0
         else:
             self.log.debug('calculating edit distance')
-            self.log.debug(f'({nx.to_numpy_array(self._previous_graph).tolist()}), '
-                           f'({nx.to_numpy_array(self._current_graph).tolist()})')
+            # self.log.debug(f'({nx.to_numpy_array(self._previous_graph).tolist()}), '
+            #                f'({nx.to_numpy_array(self._current_graph).tolist()})')
             ts_metrics['edit distance'] = nx.graph_edit_distance(self._previous_graph, self._current_graph)
         self.log.debug('copying graph...')
         self._copy_current_graph()

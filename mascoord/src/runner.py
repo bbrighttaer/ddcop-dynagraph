@@ -1,8 +1,10 @@
 import os
+import pickle
 import random
 import sys
 import threading
 import time
+from argparse import ArgumentParser
 
 import pika
 
@@ -143,7 +145,7 @@ class Runner:
             scenario=MSTScenario(
                 num_add_agents=args.num_agents,
                 num_remove_agents=args.num_remove
-            ).scenario(),
+            ).load(args.scenarios_file),
             dcop_alg=args.algs[0],
             graph_alg=args.graph_alg,
             seed=args.seed,
@@ -169,3 +171,42 @@ class Runner:
     def on_force_exit(self, sig, frame):
         log.info('Simulation terminated')
         self.terminate = True
+
+
+if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument(
+        '--num_agents',
+        type=int,
+        help='The set the number of agents to add to the environment',
+        required=True,
+    )
+    parser.add_argument(
+        '--num_remove',
+        type=int,
+        help='The set the number of agents to remove from the environment',
+        default=0,
+    )
+    parser.add_argument(
+        '-s',
+        '--seed',
+        default=0,
+        type=int,
+    )
+
+    args = parser.parse_args()
+
+    random.seed(args.seed)
+
+    scenarios = MSTScenario(
+                num_add_agents=args.num_agents,
+                num_remove_agents=args.num_remove
+            ).scenario()
+
+    with open('scenarios.pkl', 'wb') as f:
+        pickle.dump(scenarios, f)
+
+    print('Scenarios generation completed successfully')
+
+
+
