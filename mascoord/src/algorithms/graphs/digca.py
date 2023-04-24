@@ -26,14 +26,14 @@ class DIGCA(DynaGraph):
         self.announceResponseList = []
         self._ignored_ann_msgs = {}
         self._parent_already_assigned_msgs = {}
-        self._parent_msg_delay_in_seconds = 5
-        self._parent_msg_delay_start = None
+        self._timeout_delay_in_seconds = .5
+        self._timeout_delay_start = None
 
     def on_time_step_changed(self):
         self._ignored_ann_msgs.clear()
         self._parent_already_assigned_msgs.clear()
         self._has_sent_parent_available = False
-        self._parent_msg_delay_start = time.time()
+        self._timeout_delay_start = time.time()
         self.exec_started = False
 
     def connect(self):
@@ -81,8 +81,10 @@ class DIGCA(DynaGraph):
             self.announceResponseList.clear()
 
         elif not self.exec_started \
-                and time.time() - self._parent_msg_delay_start > self._parent_msg_delay_in_seconds:
+                and self._timeout_delay_start \
+                and time.time() - self._timeout_delay_start > self._timeout_delay_in_seconds:
             self.start_dcop()
+            self._timeout_delay_start = None
 
             # all_potential_children = set(self._get_potential_children())
             # exclusion_set = set(self._parent_already_assigned_msgs.keys()) ^ set(self.neighbors)

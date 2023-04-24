@@ -434,7 +434,7 @@ class Agent:
     def listen_to_network(self):
         self._time_lapse()
         # self.log.info('listening...')
-        self.client.sleep(config.AGENT_COMM_TIMEOUT_IN_SECONDS)
+        self.client.sleep(.1)
         self._start_time()
 
     def release_resources(self):
