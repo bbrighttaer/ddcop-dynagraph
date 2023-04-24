@@ -615,8 +615,7 @@ class GridWorld(SimulationEnvironment):
                 G2=self._current_graph,
                 timeout=5,
             )
-        self.log.debug('copying graph...')
-        self._copy_current_graph()
+
         self.log.debug('setting num components')
         ts_metrics['num components'] = nx.number_connected_components(self._current_graph)
         self.log.debug('setting number of nodes')
@@ -647,6 +646,9 @@ class GridWorld(SimulationEnvironment):
                 f'simulation_metrics/graphs-{self._sim_file_suffix}/{self._current_time_step}.adjlist'
             )
         )
+
+        self.log.debug('copying graph...')
+        self._copy_current_graph()
 
     def _receive_neighbor_data(self, msg):
         self.log.debug(f'Received neighbor data: {msg}')
