@@ -20,6 +20,7 @@ class DynaGraph:
         self.children_history = {}
         self.log = self.agent.log
         self.client = agent.client
+        self.exec_started = False
 
     def has_no_neighbors(self):
         return not self.parent and not self.children
@@ -45,6 +46,7 @@ class DynaGraph:
     def start_dcop(self):
         self.log.debug(f'Starting DCOP...')
         self.agent.execute_dcop()
+        self.exec_started = True
 
     def send_to_agent(self, body, to):
         self.channel.basic_publish(exchange=messaging.COMM_EXCHANGE,

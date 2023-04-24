@@ -1,4 +1,5 @@
 import random
+import time
 
 from mascoord.src import messaging
 from mascoord.src.algorithms.graphs.base import DynaGraph, get_agent_order
@@ -25,11 +26,15 @@ class DIGCA(DynaGraph):
         self.announceResponseList = []
         self._ignored_ann_msgs = {}
         self._parent_already_assigned_msgs = {}
+        self._parent_msg_delay_in_seconds = 5
+        self._parent_msg_delay_start = None
 
     def on_time_step_changed(self):
         self._ignored_ann_msgs.clear()
         self._parent_already_assigned_msgs.clear()
         self._has_sent_parent_available = False
+        self._parent_msg_delay_start = time.time()
+        self.exec_started = False
 
     def connect(self):
         if not self.parent and self.has_potential_parent() and self.state == State.INACTIVE:
@@ -43,13 +48,6 @@ class DIGCA(DynaGraph):
                     'agent_id': self.agent.agent_id,
                 })
             )
-            # self.channel.basic_publish(
-            #     exchange=messaging.COMM_EXCHANGE,
-            #     routing_key=f'{messaging.AGENTS_CHANNEL}.public',
-            #     body=messaging.create_announce_message({
-            #         'agent_id': self.agent.agent_id,
-            #     })
-            # )
 
             # wait to receive responses
             self.agent.listen_to_network()
@@ -60,11 +58,6 @@ class DIGCA(DynaGraph):
             selected_agent = None
             if self.announceResponseList:
                 selected_agent = random.choice(self.announceResponseList)
-
-            # for agent in self.announceResponseList:
-            #     if agent < int(self.agent.agent_id):
-            #         selected_agent = agent
-            #         break
 
             if selected_agent is not None:
                 self.log.debug(f'Selected agent for AddMe: {selected_agent}')
@@ -87,15 +80,24 @@ class DIGCA(DynaGraph):
 
             self.announceResponseList.clear()
 
-        elif self.has_potential_child() and not self._has_sent_parent_available:
-            for a in set(self._get_potential_children()) - set(self._parent_already_assigned_msgs.keys()):
-                self.channel.basic_publish(
-                    exchange=messaging.COMM_EXCHANGE,
-                    routing_key=f'{messaging.AGENTS_CHANNEL}.{a}',
-                    body=messaging.create_parent_available_message({
-                        'agent_id': self.agent.agent_id,
-                    })
-                )
+        elif not self.exec_started \
+                and time.time() - self._parent_msg_delay_start > self._parent_msg_delay_in_seconds:
+            self.start_dcop()
+
+            # all_potential_children = set(self._get_potential_children())
+            # exclusion_set = set(self._parent_already_assigned_msgs.keys()) ^ set(self.neighbors)
+            # potential_children = all_potential_children - exclusion_set
+            #
+            # self.log.debug(f'Sending parent available message to {potential_children}')
+            #
+            # for a in potential_children:
+            #     self.channel.basic_publish(
+            #         exchange=messaging.COMM_EXCHANGE,
+            #         routing_key=f'{messaging.AGENTS_CHANNEL}.{a}',
+            #         body=messaging.create_parent_available_message({
+            #             'agent_id': self.agent.agent_id,
+            #         })
+            #     )
 
         # else:
         #     self.log.debug(f'Not announcing, state={self.state}')
@@ -352,17 +354,12 @@ class DIGCA(DynaGraph):
     def receive_parent_already_assigned(self, message):
         sender = message['payload']['agent_id']
         self._parent_already_assigned_msgs[sender] = message
-        # self.log.debug(f'Received parent already assigned message from {sender}')
+        self.log.debug(f'Received parent already assigned message from {sender}')
 
         if len(self._parent_already_assigned_msgs.keys()) == len(self._get_potential_children()) \
                 and not self.agent.value:
             self._has_sent_parent_available = True
             self.agent.execute_dcop()
-        # else:
-        #     self.log.debug(
-        #         f'Waiting for other agents: {list(self._parent_already_assigned_msgs.keys())}, '
-        #         f'{self._get_potential_children()},{self.agent.value}'
-        #     )
 
     def _get_potential_children(self):
         agents = []
