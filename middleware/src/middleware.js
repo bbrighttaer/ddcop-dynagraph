@@ -8,7 +8,6 @@ const moment = require("moment");
 
 // amqp
 amqp.connect(`amqp://${config.AMQP_BROKER_URL}:${config.AMQP_BROKER_PORT}?frameMax=0x2000`, (error0, connection) => {
-    console.log(config.AMQP_BROKER_URL, config.AMQP_BROKER_PORT)
     if (error0) {
         console.log('Error connecting to AMQP broker: ', error0.toString());
     } else {
