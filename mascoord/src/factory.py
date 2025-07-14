@@ -45,9 +45,9 @@ if __name__ == '__main__':
         '-g',
         '--graph_alg',
         type=str,
-        choices=['ddfs', 'digca'],
+        choices=['ddfs', 'digca', 'dbfs'],
         default='digca',
-        help='The DCOP algorithm to be used with the Dynamic Graph algorithm',
+        help='The dynamic interaction graph construction algorithm',
     )
     parser.add_argument(
         '-d',

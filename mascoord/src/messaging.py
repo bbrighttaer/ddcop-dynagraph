@@ -43,6 +43,9 @@ CONSTRAINT_CHANGED = 'CONSTRAINT_CHANGED'
 PARENT_AVAILABLE = 'PARENT_AVAILABLE'
 PARENT_ALREADY_ASSIGNED = 'PARENT_ALREADY_ASSIGNED'
 AGENT_REGISTRATION = 'AGENT_REGISTRATION'
+DBFS_LEVEL_MESSAGE = 'LEVEL_MESSAGE'
+DBFS_ACK_MESSAGE = 'ACK_MESSAGE'
+DBFS_LEVEL_IGNORED_MESSAGE = 'LEVEL_IGNORED_MESSAGE'
 
 # monitor channel message types
 AGENT_CONNECTION_MSG = 'AGENT_CONNECTION_MSG'
@@ -272,3 +275,12 @@ def create_ddfs_pseudo_child_message(data):
 
 def create_execution_request_message(data):
     return _create_msg(EXECUTION_REQUEST, data)
+
+def create_dbfs_level_message(data):
+    return _create_msg(DBFS_LEVEL_MESSAGE, data)
+
+def create_dbfs_ack_message(data):
+    return _create_msg(DBFS_ACK_MESSAGE, data)
+
+def create_dbfs_level_ignored_message(data):
+    return _create_msg(DBFS_LEVEL_IGNORED_MESSAGE, data)

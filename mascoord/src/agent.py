@@ -15,7 +15,7 @@ import logger
 import mascoord.src.algorithms.graphs
 import mascoord.src.algorithms.graphs.digca
 import messaging
-from mascoord.src.algorithms.graphs import DDFS, DIGCA
+from mascoord.src.algorithms.graphs import DDFS, DIGCA, DBFS
 from mascoord.src.equations import Quadratic
 from mascoord.src.utils import time_diff, notify_wrap
 
@@ -119,10 +119,10 @@ class Agent:
         )
 
         # algorithms
-        if 'graph_algorithm' in kwargs and kwargs['graph_algorithm'] == 'ddfs':
-            self.graph = DDFS(self)
-        else:
-            self.graph = DIGCA(self)
+        self.graph = {
+            'ddfs': DDFS,
+            'dbfs': DBFS,
+        }.get(kwargs['graph_algorithm'], DIGCA)(self)
         self.dcop = dcop_algorithm(self, num_discrete_points=kwargs['domain_size'])
 
         self.report_shutdown = False
@@ -373,6 +373,15 @@ class Agent:
 
             case messaging.DDFS_PSEUDO_CHILD_MSG:
                 self.graph.receive_pseudo_child_msg(message)
+
+            case messaging.DBFS_LEVEL_MESSAGE:
+                self.graph.receive_dbfs_level_message(message)
+
+            case messaging.DBFS_ACK_MESSAGE:
+                self.graph.receive_dbfs_ack_message(message)
+
+            case messaging.DBFS_LEVEL_IGNORED_MESSAGE:
+                self.graph.receive_dbfs_level_ignored_message(message)
 
             case _:
                 self.log.info(f'Could not handle received payload: {message}')

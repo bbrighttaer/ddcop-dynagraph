@@ -43,6 +43,9 @@ METRICS_HEADERS = [
     messaging.DDFS_PSEUDO_CHILD_MSG,
     messaging.UTIL_MESSAGE,
     messaging.VALUE_MESSAGE,
+    messaging.DBFS_LEVEL_MESSAGE,
+    messaging.DBFS_ACK_MESSAGE,
+    messaging.DBFS_LEVEL_IGNORED_MESSAGE,
 ]
 
 
