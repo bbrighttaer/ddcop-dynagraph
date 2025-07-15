@@ -18,6 +18,7 @@ class SimulationEnvironment(object):
         self._terminate = False
         self.log = logger.get_logger(name)
         self.name = name
+        self.scenario = scenario
         self._events_iterator = iter(scenario) if scenario else None
         self._state_history = []
         self.time_step_delay = time_step_delay

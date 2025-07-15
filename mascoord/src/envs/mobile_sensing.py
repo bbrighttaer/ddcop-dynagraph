@@ -193,6 +193,7 @@ class GridWorld(SimulationEnvironment):
         self._metrics_file_headers = []
         self._sim_file_suffix = f'{seed}_{dcop_alg}_{graph_alg}'
         self._metrics_file_name = f'metrics_{self._sim_file_suffix}.csv'
+        self.metrics_folder = f'simulation_metrics_a{self.scenario.num_add_agents}_r{self.scenario.num_remove_agents}'
 
         self._handlers = {
             messaging.AGENT_REGISTRATION: self._receive_agent_registration,
@@ -525,7 +526,6 @@ class GridWorld(SimulationEnvironment):
             f'Applying actions: num of actions = {len(self._delayed_actions)}, num_agents: {len(self.agents)}')
         for msg in self._delayed_actions.values():
             self._apply_selected_action(agent=msg['agent_id'], value=msg['value'])
-        self._delayed_actions.clear()
 
     def calc_agent_score(self, agent: MobileSensingAgent):
         return self._calculate_cell_score(agent.current_cell)
@@ -583,8 +583,8 @@ class GridWorld(SimulationEnvironment):
             self._current_graph = nx.Graph()
 
     def _write_metrics_file_header(self, headers):
-        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics'), exist_ok=True)
-        file = os.path.join(ROOT_DIR, 'simulation_metrics', self._metrics_file_name)
+        os.makedirs(os.path.join(ROOT_DIR, self.metrics_folder), exist_ok=True)
+        file = os.path.join(ROOT_DIR, self.metrics_folder, self._metrics_file_name)
         with open(file, mode='w', encoding='utf-8', newline='') as f:
             csvwriter = csv.writer(f)
             csvwriter.writerow(headers)
@@ -592,7 +592,7 @@ class GridWorld(SimulationEnvironment):
 
     def _add_metrics_csv_line(self, ts_metrics: dict):
         data = [ts_metrics.get(c, 0) for c in METRICS_HEADERS]
-        file = os.path.join(ROOT_DIR, 'simulation_metrics', self._metrics_file_name)
+        file = os.path.join(ROOT_DIR, self.metrics_folder, self._metrics_file_name)
         with open(file, mode='a', encoding='utf-8', newline='\n') as f:
             csvwriter = csv.writer(f)
             csvwriter.writerow(data)
@@ -633,23 +633,23 @@ class GridWorld(SimulationEnvironment):
 
         # save grid info to file
         self.log.debug('Writing sim grids...')
-        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', f'grids-{self._sim_file_suffix}'), exist_ok=True)
+        os.makedirs(os.path.join(ROOT_DIR, self.metrics_folder, f'grids-{self._sim_file_suffix}'), exist_ok=True)
         grid_info = self._state_history[-1]
         with open(os.path.join(
                 ROOT_DIR,
-                f'simulation_metrics/grids-{self._sim_file_suffix}',
+                f'{self.metrics_folder}/grids-{self._sim_file_suffix}',
                 f'grid-{self._current_time_step}.txt'
         ), 'w') as f:
             f.write(str(grid_info))
 
         # save graph info to file
         self.log.debug('Writing sim graphs...')
-        os.makedirs(os.path.join(ROOT_DIR, 'simulation_metrics', f'graphs-{self._sim_file_suffix}'), exist_ok=True)
+        os.makedirs(os.path.join(ROOT_DIR, self.metrics_folder, f'graphs-{self._sim_file_suffix}'), exist_ok=True)
         nx.write_adjlist(
             self._current_graph,
             os.path.join(
                 ROOT_DIR,
-                f'simulation_metrics/graphs-{self._sim_file_suffix}/{self._current_time_step}.adjlist'
+                f'{self.metrics_folder}/graphs-{self._sim_file_suffix}/{self._current_time_step}.adjlist'
             )
         )
 

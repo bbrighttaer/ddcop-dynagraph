@@ -99,6 +99,8 @@ class Scenario(SimpleRepr):
     """
 
     def __init__(self, events: List[DcopEvent] = None):
+        self.num_add_agents = 0
+        self.num_remove_agents = 0
         self._events = events if events else []
 
     def __iter__(self):
@@ -153,7 +155,8 @@ class MSTScenario:
                 )
                 add_agents.append(agent)
                 i += 1
-
+        scenario.num_add_agents = self._num_add_agents
+        scenario.num_remove_agents = self._num_remove_agents
         return scenario
 
     def load(self, file_path):
@@ -161,6 +164,9 @@ class MSTScenario:
             with open(file_path, 'rb') as f:
                 obj: Scenario = pickle.load(f)
             assert len(obj.events) == self._num_add_agents + self._num_remove_agents
-            return obj
         else:
-            return self.scenario()
+            obj = self.scenario()
+        obj.num_add_agents = self._num_add_agents
+        obj.num_remove_agents = self._num_remove_agents
+        return obj
+
