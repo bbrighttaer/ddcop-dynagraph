@@ -63,6 +63,7 @@ class DBFS(DynaGraph):
                         body=messaging.create_dbfs_level_message({
                             'agent_id': self.agent.agent_id,
                             'level': self.level,
+                            'extra_args': self.agent.connection_extra_args,
                         }),
                         to=a,
                     )
@@ -77,9 +78,11 @@ class DBFS(DynaGraph):
         if not self.parent:
             # send ack message to sender and set as parent
             self.parent = sender
+            self.agent.connection_extra_args_callback(sender, msg['extra_args'])
             self.send_to_agent(
                 body=messaging.create_dbfs_ack_message({
                     'agent_id': self.agent.agent_id,
+                    'extra_args': self.agent.connection_extra_args,
                 }),
                 to=sender,
             )
@@ -93,6 +96,7 @@ class DBFS(DynaGraph):
                         body=messaging.create_dbfs_level_message({
                             'agent_id': self.agent.agent_id,
                             'level': self.level,
+                            'extra_args': self.agent.connection_extra_args
                         }),
                         to=a,
                     )
@@ -119,6 +123,7 @@ class DBFS(DynaGraph):
         sender = msg['agent_id']
         self.children.append(sender)
         self._potential_children_rec_msgs.append(sender)
+        self.agent.connection_extra_args_callback(sender, msg['extra_args'])
 
         # update current sim graph
         self.channel.basic_publish(

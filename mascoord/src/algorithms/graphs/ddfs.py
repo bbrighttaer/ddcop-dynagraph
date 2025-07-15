@@ -140,6 +140,7 @@ class DDFS(DynaGraph):
                     body=messaging.create_ddfs_position_message({
                         'agent_id': self.agent.agent_id,
                         'position': self._max,
+                        'extra_args': self.agent.connection_extra_args,
                     }),
                     to=agt,
                 )
@@ -149,6 +150,7 @@ class DDFS(DynaGraph):
     def receive_position_msg(self, message):
         self.log.debug(f'Received position message: {message}')
         msg = message['payload']
+        self.agent.connection_extra_args_callback(msg['agent_id'], msg['extra_args'])
 
         self._parents_levels[msg['agent_id']] = msg['position']
 
@@ -161,6 +163,7 @@ class DDFS(DynaGraph):
             self.send_to_agent(
                 body=messaging.create_ddfs_child_message({
                     'agent_id': self.agent.agent_id,
+                    'extra_args': self.agent.connection_extra_args,
                 }),
                 to=self.parent,
             )
@@ -194,6 +197,7 @@ class DDFS(DynaGraph):
         msg = msg['payload']
         self.children.append(msg['agent_id'])
         self.log.debug(f'Added {msg["agent_id"]} as child')
+        self.agent.connection_extra_args_callback(msg['agent_id'], msg['extra_args'])
 
         # update current graph
         self.channel.basic_publish(
