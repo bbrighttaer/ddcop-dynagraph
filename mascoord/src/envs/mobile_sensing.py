@@ -477,8 +477,7 @@ class GridWorld(SimulationEnvironment):
     def _receive_value_selection(self, msg, is_forced=False):
         self.log.info(f'Received action selection: {msg}')
 
-        # use timestep to control the dropping of delayed messages
-        if not is_forced and msg['timestep'] == self._current_time_step:
+        if not is_forced:
             self._delayed_actions[msg['agent_id']] = msg
 
         if len(self._delayed_actions) == len(self.agents) or is_forced:
@@ -500,16 +499,17 @@ class GridWorld(SimulationEnvironment):
 
     def _apply_selected_action(self, agent, value):
         # apply action
-        agt = self.agents[agent]
-        current_agt_cell = agt.current_cell
-        action = getattr(current_agt_cell, value)
-        if action is not None:
-            new_cell = self.grid.get(action(), None)
-            if new_cell:
-                current_agt_cell.contents.remove(agt)
-                agt.current_cell = new_cell
-                new_cell.contents.append(agt)
-                self.log.debug(f'Agent {agent} changed from {current_agt_cell.cell_id} to {new_cell.cell_id}')
+        agt = self.agents.get(agent)
+        if agt:
+            current_agt_cell = agt.current_cell
+            action = getattr(current_agt_cell, value)
+            if action is not None:
+                new_cell = self.grid.get(action(), None)
+                if new_cell:
+                    current_agt_cell.contents.remove(agt)
+                    agt.current_cell = new_cell
+                    new_cell.contents.append(agt)
+                    self.log.debug(f'Agent {agent} changed from {current_agt_cell.cell_id} to {new_cell.cell_id}')
 
     def calculate_global_score(self) -> float:  # number of violations, score
         self.log.debug('Calculating global score')
