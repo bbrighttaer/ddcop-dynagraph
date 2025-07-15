@@ -203,7 +203,7 @@ if __name__ == '__main__':
                 num_remove_agents=args.num_remove
             ).scenario()
 
-    with open('scenarios.pkl', 'wb') as f:
+    with open(f'scenarios_a{args.num_agents}_r{args.num_remove}.pkl', 'wb') as f:
         pickle.dump(scenarios, f)
 
     print('Scenarios generation completed successfully')

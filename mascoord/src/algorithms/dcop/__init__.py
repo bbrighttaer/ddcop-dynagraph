@@ -87,6 +87,7 @@ class DCOP:
                 'cpa': self.cpa,
                 'value': val,
                 'metrics': self.agent.agent_metrics.get_metrics(),
+                'timestep': self.agent.timestep
             })
         )
 

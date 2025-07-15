@@ -391,6 +391,7 @@ class GridWorld(SimulationEnvironment):
                 for agt in self.get_agents_in_communication_range(agent_id)
             },
             'event_timestamp': self._event_timestamp,
+            'timestep': self._current_time_step
         }
 
     def get_agents_in_communication_range(self, agent_id) -> list:
@@ -476,7 +477,8 @@ class GridWorld(SimulationEnvironment):
     def _receive_value_selection(self, msg, is_forced=False):
         self.log.info(f'Received action selection: {msg}')
 
-        if not is_forced:
+        # use timestep to control the dropping of delayed messages
+        if not is_forced and msg['timestep'] == self._current_time_step:
             self._delayed_actions[msg['agent_id']] = msg
 
         if len(self._delayed_actions) == len(self.agents) or is_forced:
@@ -523,6 +525,7 @@ class GridWorld(SimulationEnvironment):
             f'Applying actions: num of actions = {len(self._delayed_actions)}, num_agents: {len(self.agents)}')
         for msg in self._delayed_actions.values():
             self._apply_selected_action(agent=msg['agent_id'], value=msg['value'])
+        self._delayed_actions.clear()
 
     def calc_agent_score(self, agent: MobileSensingAgent):
         return self._calculate_cell_score(agent.current_cell)

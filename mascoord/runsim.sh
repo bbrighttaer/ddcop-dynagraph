@@ -10,11 +10,11 @@ graph_algs=("dbfs" "ddfs" "digca")
 NUM_SEEDS=5
 
 # Fixed parameters
-num_agents=30
-num_remove=5
-num_targets=15
-grid_size=5
-scenarios_file="scenarios.pkl"
+num_agents=100
+num_remove=20
+num_targets=30
+grid_size=10
+scenarios_file="scenarios_a100_r20.pkl"
 
 # Record start time
 start_time=$(date +%s)

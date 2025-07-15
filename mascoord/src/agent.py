@@ -78,6 +78,7 @@ class Agent:
         self.accum_time = 0
         self.agent_metrics = AgentMetrics(self.agent_id, self.log)
         self.latest_event_timestamp = None
+        self.timestep = -1
 
         self.agents_in_comm_range = None
         self.new_agents = set()
@@ -389,6 +390,7 @@ class Agent:
     def _receive_time_step_message(self, message):
         self.latest_event_timestamp = message['payload']['event_timestamp']
         self.log.info(f'Received time step message: {message}')
+        self.timestep = message['payload']['timestep']
         self.dcop.domain = message['payload']['agent_domain']
         self.dcop.neighbor_domains = message['payload']['neighbor_domains']
         self.agents_in_comm_range = message['payload']['agents_in_comm_range']
